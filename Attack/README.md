@@ -11,7 +11,9 @@ versions used in this project:
   Inet 20111118
 
 After the installation and configuration phase all the repository files must be added to
-the Oversim directory system (by replacing the old files). 
+the Oversim directory system by replacing the old files, since the application is not
+developed from scratch but over a preexisting project that uses libraries and modules 
+present in the framework. 
 Archives in /simulations contain simulation input datasets and must be extracted before
 performing the simulations. In /simulations is also present the omentpp.ini file 
 where it is possible to set up the configuration (config MyApplicationConfKademlia). 
