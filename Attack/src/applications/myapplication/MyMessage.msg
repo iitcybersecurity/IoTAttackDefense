@@ -1,24 +1,4 @@
-//
-// Copyright (C) 2009 Institut fuer Telematik, Universitaet Karlsruhe (TH)
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either version 2
-// of the License, or (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-//
 
-//
-// @author Antonio Zea
-//
 
 cplusplus {{
 #include <TransportAddress.h>
@@ -40,9 +20,9 @@ enum MessageType
 {
     //MYMSG_FWD = 1;           // outgoing message
     //MYMSG_PONG = 2;           // returning message
-    MYMSG_GET_TOPOLOGY1_DATA = 3;
-    MYMSG_GET_TOPOLOGY1_RESPONSE = 4;
-    MYMSG_PUT_TOPOLOGY1_DATA = 5;
+    MYMSG_GET_OPENSHS_DATA = 3;
+    MYMSG_GET_OPENSHS_RESPONSE = 4;
+    MYMSG_PUT_OPENSHS_DATA = 5;
     MYMSG_PUT_FLOW = 6;
     MYMSG_GET_FLOW = 7;
     MYMSG_PUT_TEMPERATURE = 8;
