@@ -1,24 +1,4 @@
-//
-// Copyright (C) 2009 Institut fuer Telematik, Universitaet Karlsruhe (TH)
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either version 2
-// of the License, or (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-//
 
-/**
- * @author Antonio Zea
-  */
 
 #ifndef MYAPPLICATION_H
 #define MYAPPLICATION_H
@@ -115,57 +95,11 @@ struct Flow{
     std::string idle_max;
     std::string idle_min;
     std::string slot;
-};
+};/*
 struct FlowContainer{
     vector<Flow> flowVector;
     int sizee; //debug
-};
-/*
-struct flow_collector{
-    std::string * dest_ip;
-    std::string *timestamps;
-    std::string *flow_duration;
-    std::string *total_fwd_packets;
-    std::string *total_bwd_packets;
-    std::string *total_fwd_len;
-    std::string *total_bwd_len;
-    std::string *fwd_packets_len_max;
-    std::string *fwd_packets_len_min;
-    std::string *fwd_packets_len_mean;
-    std::string * fwd_packets_len_std;
-    std::string * bwd_packets_len_max;
-    std::string * bwd_packets_len_min;
-    std::string *bwd_packets_len_mean;
-    std::string *bwd_packets_len_std;
-    std::string *fwd_IAT_mean;
-    std::string *fwd_IAT_std;
-    std::string *fwd_IAT_max;
-    std::string *fwd_IAT_min;
-    std::string *bwd_IAT_mean;
-    std::string *bwd_IAT_std;
-    std::string *bwd_IAT_max;
-    std::string *bwd_IAT_min;
-    std::string *fwd_PSH_flags;
-    std::string *bwd_PSH_flags;
-    std::string *fwd_URG_flags;
-    std::string *bwd_URG_flags;
-    std::string *fwd_header_len;
-    std::string *bwd_header_len;
-    std::string *subflow_fwd_packets;
-    std::string *subflow_fwd_bytes;
-    std::string *subflow_bwd_packets;
-    std::string *subflow_bwd_bytes;
-    std::string *active_mean;
-    std::string *active_std;
-    std::string *active_max;
-    std::string *active_min;
-    std::string *idle_mean;
-    std::string *idle_std;
-    std::string *idle_max;
-    std::string *idle_min;
-
-};
-*/
+};*/
 class MyApplication : public BaseApp
 {
     private:
@@ -184,25 +118,25 @@ class MyApplication : public BaseApp
         };
 
     // module parameters
-    //simtime_t sendPeriod;     // we'll store the "sendPeriod" parameter here
-  //  int numToSend;            // we'll store the "numToSend" parameter here
-  //  int largestKey;           // we'll store the "largestKey" parameter here
     simtime_t flowSlotTime;
     //int flowPerSlot;
     bool node_is_started;
     int numSimNodes;
     int ttl; /**< ttl for stored DHT records */
     int numReplicas;
-    bool resourceExhaustionAttack;
+   // bool resourceExhaustionAttack;
     bool invalidDataAttack;
-    bool scenario5Attack;
+    bool scenario2attack;
+    bool scenario5attack;
+    bool scenario6attack;
     bool isDataIntegrityEnabled;
     int maliciousLimit;
     int topology;
     int putTemperaturePeriod;
+    int putMotionPeriod;
     double readTemperatureProbability;
     double readMotionProbability;
-
+    bool *isInvalidFlowDataArray;  //debug
     // statistics
     int numSent; /**< number of sent packets*/
     int numGetSent; /**< number of get sent*/
@@ -240,9 +174,9 @@ class MyApplication : public BaseApp
     double reputationThreshold;
     double beliefVar;
     double disbeliefVar;
-    int reputationStrikesLimit;
+   // int reputationStrikesLimit;
 
-    std::map<OverlayKey, DHTEntry> topology1SensorDataMap;
+    std::map<OverlayKey, DHTEntry> openSHSSensorDataMap;
     std::map<OverlayKey, DHTEntry> temperatureDataMap;
     std::map<OverlayKey, DHTEntry> motionDataMap;
     std::map<OverlayKey, DHTEntry> flowDataMap;
@@ -255,12 +189,13 @@ class MyApplication : public BaseApp
     Flow flow_array[N];*/
     //FlowContainer flowContainerArray[N];
 
+    std::vector < OverlayKey > LUT_nodesKeys;  // data structure for storing all the nodes Kademlia key. (i'th element contains node i's key)
 
-    std::vector < OverlayKey > LUT_nodesKeys;
-    InfoMessage * dhttestput_timer,
-    *dhttestget_timer,
+    //messages for timer events
+    InfoMessage * openSHS_put_timer,
+    *openSHS_get_timer,
     *UDPsend_timer,
-    *topology1_classification_timer,
+    *openSHS_classification_timer,
     *put_temperature_timer,
     *get_temperature_timer,
     *put_motion_timer,
@@ -270,27 +205,19 @@ class MyApplication : public BaseApp
     *flow_classification_timer,
     *get_vote_timer,
     * update_reputation_timer;
+
     UnderlayConfigurator * underlayConfigurator; /**< pointer to UnderlayConfigurator in this node */
     GlobalNodeList * globalNodeList; /**< pointer to GlobalNodeList in this node*/
 
-    static const int DHTTESTAPP_VALUE_LEN = 20;
+   // static const int DHTTESTAPP_VALUE_LEN = 20;
 
-
-    // application routines
     void initializeApp(int stage);                 // called when the module is being created
     void finishApp();                              // called when the module is about to be destroyed
     void handleTimerEvent(cMessage* msg);          // called when we received a timer message
     void deliver(OverlayKey& key, cMessage* msg);  // called when we receive a message from the overlay
     void handleUDPMessage(cMessage* msg);          // called when we receive a UDP message
-   /* virtual void handleGetResponse(DHTgetCAPIResponse * msg, DHTStatsContext * context);
-    virtual void handlePutResponse(DHTputCAPIResponse * msg,
-            DHTStatsContext * context);
 
-    void handleRpcResponse(BaseResponseMessage * msg, const RpcState & state, simtime_t rtt);
-    */
-
-    virtual void handleTraceMessage(cMessage * msg);
-    void saveTopology1SensorData(const OverlayKey& key, const DHTEntry& entry);
+    void saveOpenSHSSensorData(const OverlayKey& key, const DHTEntry& entry);
     void saveTemperatureData(const OverlayKey& key, const DHTEntry& entry);
     void saveMotionData(const OverlayKey& key, const DHTEntry& entry);
     void saveFlowData(const OverlayKey& key, const DHTEntry& entry);
@@ -298,7 +225,7 @@ class MyApplication : public BaseApp
     void saveVoteData(const OverlayKey& key, const DHTDoubleEntry& entry);
 
 
-    const DHTEntry* retrieveTopology1SensorData(const OverlayKey& key);
+    const DHTEntry* retrieveOpenSHSSensorData(const OverlayKey& key);
     const DHTEntry* retrieveTemperatureData(const OverlayKey& key);
     const DHTEntry* retrieveMotionData(const OverlayKey& key);
     const DHTEntry* retrieveFlowData(const OverlayKey& key);
@@ -314,9 +241,9 @@ class MyApplication : public BaseApp
 
     public:
       ~MyApplication() {
-         cancelAndDelete(dhttestput_timer);
-         cancelAndDelete(dhttestget_timer);
-         cancelAndDelete(topology1_classification_timer);
+         cancelAndDelete(openSHS_put_timer);
+         cancelAndDelete(openSHS_get_timer);
+         cancelAndDelete(openSHS_classification_timer);
          cancelAndDelete(UDPsend_timer);
          cancelAndDelete(put_temperature_timer);
          cancelAndDelete(get_temperature_timer);
@@ -328,118 +255,25 @@ class MyApplication : public BaseApp
 
        MyApplication() {
 
-             dhttestput_timer = NULL;
-             dhttestget_timer = NULL;
-             topology1_classification_timer = NULL;
-             UDPsend_timer = NULL;
-             put_temperature_timer= NULL;
-             get_temperature_timer = NULL;
-             put_motion_timer = NULL;
-             get_motion_timer = NULL;
+           openSHS_put_timer = NULL,
+           openSHS_get_timer = NULL,
+           UDPsend_timer = NULL,
+           openSHS_classification_timer = NULL,
+           put_temperature_timer = NULL,
+           get_temperature_timer = NULL,
+           put_motion_timer = NULL,
+           get_motion_timer = NULL,
+           put_flow_timer = NULL,
+           get_flow_timer = NULL,
+           flow_classification_timer = NULL,
+           get_vote_timer = NULL,
+           update_reputation_timer = NULL;
 
-             node_is_started = false;
-
-
-
-        //flow_array=new Flow[N];
-/*
-             fc.dest_ip = new string[N];;
-             fc.timestamps = new string[N];;
-             fc.flow_duration = new string[N];;
-             fc.total_fwd_packets = new string[N];;
-             fc.total_bwd_packets = new string[N];;
-             fc.total_fwd_len = new string[N];;
-             fc.total_bwd_len = new string[N];;
-             fc.fwd_packets_len_max = new string[N];;
-             fc.fwd_packets_len_min = new string[N];;
-             fc.fwd_packets_len_mean = new string[N];;
-             fc.fwd_packets_len_std = new string[N];;
-             fc.bwd_packets_len_max = new string[N];;
-             fc.bwd_packets_len_min = new string[N];;
-             fc.bwd_packets_len_mean = new string[N];;
-             fc.bwd_packets_len_std = new string[N];;
-             fc.fwd_IAT_mean = new string[N];;
-             fc.fwd_IAT_std = new string[N];;
-             fc.fwd_IAT_max = new string[N];;
-             fc.fwd_IAT_min = new string[N];;
-             fc.bwd_IAT_mean = new string[N];;
-             fc.bwd_IAT_std = new string[N];;
-             fc.bwd_IAT_max = new string[N];;
-             fc.bwd_IAT_min = new string[N];;
-             fc.fwd_PSH_flags = new string[N];;
-             fc.bwd_PSH_flags = new string[N];;
-             fc.fwd_URG_flags = new string[N];;
-             fc.bwd_URG_flags = new string[N];;
-             fc.fwd_header_len = new string[N];;
-             fc.bwd_header_len = new string[N];;
-             fc.subflow_fwd_packets = new string[N];;
-             fc.subflow_fwd_bytes = new string[N];;
-             fc.subflow_bwd_packets = new string[N];;
-             fc.subflow_bwd_bytes = new string[N];;
-             fc.active_mean = new string[N];;
-             fc.active_std = new string[N];;
-             fc.active_max = new string[N];;
-             fc.active_min = new string[N];;
-             fc.idle_mean = new string[N];;
-             fc.idle_std = new string[N];;
-             fc.idle_max = new string[N];;
-             fc.idle_min = new string[N];;
-*/
-/*
-         for(int i=0;i<N;i++){
-             flow_array[i].src_ip = "NULL";
-             flow_array[i].dest_ip = "NULL";
-             flow_array[i].timestamps = "NULL";
-             flow_array[i].flow_duration = "NULL";
-             flow_array[i].total_fwd_packets = "NULL";
-             flow_array[i].total_bwd_packets = "NULL";
-             flow_array[i].total_fwd_len = "NULL";
-             flow_array[i].total_bwd_len = "NULL";
-             flow_array[i].fwd_packets_len_max = "NULL";
-             flow_array[i].fwd_packets_len_min = "NULL";
-             flow_array[i].fwd_packets_len_mean = "NULL";
-             flow_array[i].fwd_packets_len_std = "NULL";
-             flow_array[i].bwd_packets_len_max = "NULL";
-             flow_array[i].bwd_packets_len_min = "NULL";
-             flow_array[i].bwd_packets_len_mean = "NULL";
-             flow_array[i].bwd_packets_len_std = "NULL";
-             flow_array[i].fwd_IAT_mean = "NULL";
-             flow_array[i].fwd_IAT_std = "NULL";
-             flow_array[i].fwd_IAT_max = "NULL";
-             flow_array[i].fwd_IAT_min = "NULL";
-             flow_array[i].bwd_IAT_mean = "NULL";
-             flow_array[i].bwd_IAT_std = "NULL";
-             flow_array[i].bwd_IAT_max = "NULL";
-             flow_array[i].bwd_IAT_min = "NULL";
-             flow_array[i].fwd_PSH_flags = "NULL";
-             flow_array[i].bwd_PSH_flags = "NULL";
-             flow_array[i].fwd_URG_flags = "NULL";
-             flow_array[i].bwd_URG_flags = "NULL";
-             flow_array[i].fwd_header_len = "NULL";
-             flow_array[i].bwd_header_len = "NULL";
-             flow_array[i].subflow_fwd_packets = "NULL";
-             flow_array[i].subflow_fwd_bytes = "NULL";
-             flow_array[i].subflow_bwd_packets = "NULL";
-             flow_array[i].subflow_bwd_bytes = "NULL";
-             flow_array[i].active_mean = "NULL";
-             flow_array[i].active_std = "NULL";
-             flow_array[i].active_max = "NULL";
-             flow_array[i].active_min = "NULL";
-             flow_array[i].idle_mean = "NULL";
-             flow_array[i].idle_std = "NULL";
-             flow_array[i].idle_max = "NULL";
-             flow_array[i].idle_min = "NULL";
-
-         }*/
+           node_is_started = false;
        }
 };
-static const int TEST_MAP_INTERVAL = 10; /**< interval in seconds for writing periodic statistical information */
-
-//static GlobalStatistics* globalStatistics; /**< pointer to GlobalStatistics module in this node */
-//static std::map<OverlayKey, DHTEntry> dataMap; /**< The map contains correct sensor data */
-//static NodeHandle* addressMap[500];
-//static int address_counter=0;
-static int nodes_counter=-1;
+//static const int TEST_MAP_INTERVAL = 10; /**< interval in seconds for writing periodic statistical information */
+static int nodes_counter = -1;
 
 
 #endif
