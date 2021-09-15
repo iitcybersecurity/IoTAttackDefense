@@ -33,9 +33,9 @@ void doUnpacking(cCommBuffer *, T& t) {
 EXECUTE_ON_STARTUP(
     cEnum *e = cEnum::find("MessageType");
     if (!e) enums.getInstance()->add(e = new cEnum("MessageType"));
-    e->insert(MYMSG_GET_TOPOLOGY1_DATA, "MYMSG_GET_TOPOLOGY1_DATA");
-    e->insert(MYMSG_GET_TOPOLOGY1_RESPONSE, "MYMSG_GET_TOPOLOGY1_RESPONSE");
-    e->insert(MYMSG_PUT_TOPOLOGY1_DATA, "MYMSG_PUT_TOPOLOGY1_DATA");
+    e->insert(MYMSG_GET_OPENSHS_DATA, "MYMSG_GET_OPENSHS_DATA");
+    e->insert(MYMSG_GET_OPENSHS_RESPONSE, "MYMSG_GET_OPENSHS_RESPONSE");
+    e->insert(MYMSG_PUT_OPENSHS_DATA, "MYMSG_PUT_OPENSHS_DATA");
     e->insert(MYMSG_PUT_FLOW, "MYMSG_PUT_FLOW");
     e->insert(MYMSG_GET_FLOW, "MYMSG_GET_FLOW");
     e->insert(MYMSG_PUT_TEMPERATURE, "MYMSG_PUT_TEMPERATURE");
