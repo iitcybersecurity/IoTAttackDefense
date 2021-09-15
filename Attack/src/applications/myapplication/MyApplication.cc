@@ -37,11 +37,13 @@ void MyApplication::initializeApp(int stage)
 
     // copy the module parameter values to our own variables
     numReplicas = par("numReplicas");
-    numSimNodes = par("numSimNodes");
+    //numSimNodes = par("numSimNodes");
+    numSimNodes= par("targetOverlayTerminalNum");
     flowSlotTime = par("flowSlotTime");
     //flowPerSlot = par("flowPerSlot");
     topology=par("topology");
     putTemperaturePeriod = par("putTemperaturePeriod");
+    putMotionPeriod = par("putMotionPeriod");
     readTemperatureProbability = par("readTemperatureProbability");
     readMotionProbability = par("readMotionProbability");
     /*w = par("w");
@@ -53,30 +55,30 @@ void MyApplication::initializeApp(int stage)
     reputationThreshold = par("reputationThreshold");
     beliefVar = par("beliefVar");
     disbeliefVar = par("disbeliefVar");
-    reputationStrikesLimit = par("reputationStrikesLimit");
+    //reputationStrikesLimit = par("reputationStrikesLimit");
     //Attacks
-    resourceExhaustionAttack = par("resourceExhaustionAttack");
-    invalidDataAttack = par("invalidDataAttack");
-    scenario5Attack = par("scenario5Attack");
+    //resourceExhaustionAttack = par("resourceExhaustionAttack");
+    //invalidDataAttack = par("invalidDataAttack");
+    scenario2attack = par("scenario2attack");
+    scenario5attack = par("scenario5attack");
+    scenario6attack = par("scenario6attack");
     isDataIntegrityEnabled = par("isDataIntegrityEnabled");
 
     globalNodeList = GlobalNodeListAccess().get();
     underlayConfigurator = UnderlayConfiguratorAccess().get();
     globalStatistics = GlobalStatisticsAccess().get();
 
-    // statistics
     numSent = 0;
-    numGetSent = 0;
-    numPutSent = 0;
-    simResetTime = 20;
 
     //generate nodeId of this node
     nodeId = generateNodeId();
-    // initialize our statistics variables
     numSent = 0;
-    numReceived = 0;
 
-    //the array that will contain topology1 sensor data must be initialized
+    isInvalidFlowDataArray=new bool[numSimNodes]();//debug
+    for(int i=0;i<numSimNodes;i++){
+        isInvalidFlowDataArray[i]=false;
+    }
+    //the array that will contain OPENSHS sensor data must be initialized
     sensorDataArray = new char[numSimNodes]();
      for(int i=0;i<numSimNodes;i++){
         sensorDataArray[i]='2'; //it means that the i-th node's detected value hasn't been received yet
@@ -107,7 +109,7 @@ void MyApplication::initializeApp(int stage)
          reputation[i]= new double[3];
          reputation[i][0] = 1;  //Validity of normal behavior
          reputation[i][1] = 1;  //Validity of malicious behavior
-         reputation[i][2] = 0;  //number of strikes. at 3 strikes a node is considered as anomalous.
+         //reputation[i][2] = 0;  //number of strikes. at 3 strikes a node is considered as anomalous.
      }
      //at beginning each node of the network is considered as trustful
      trust = new double*[numSimNodes]();
@@ -138,15 +140,15 @@ void MyApplication::initializeApp(int stage)
     std::cout << "node" << nodeId <<", ip => "<< thisNode.getIp() << ", key => " << LUT_nodesKeys[nodeId] << endl;
 
     // These are messages that must be scheduled and handled by handleTimerMessage()
-    dhttestput_timer = new InfoMessage("topology1_put_timer");
-    dhttestget_timer = new InfoMessage("topology1_get_timer");
+    openSHS_put_timer = new InfoMessage("openSHS_put_timer");
+    openSHS_get_timer = new InfoMessage("openSHS_get_timer");
     put_temperature_timer = new InfoMessage("put_temperature_timer");
     get_temperature_timer = new InfoMessage("get_temperature_timer");
     put_motion_timer = new InfoMessage("put_motion_timer");
     get_motion_timer = new InfoMessage("get_motion_timer");
     put_flow_timer = new InfoMessage("put_flow_timer");
     get_flow_timer = new InfoMessage("get_flow_timer");
-    topology1_classification_timer = new InfoMessage("topology1_classification_timer");
+    openSHS_classification_timer = new InfoMessage("openSHS_classification_timer");
     flow_classification_timer = new InfoMessage("flow_classification_timer");
     get_vote_timer = new InfoMessage("get_vote_timer");
     update_reputation_timer = new InfoMessage("update_reputation_timer");
@@ -155,7 +157,7 @@ void MyApplication::initializeApp(int stage)
 
     fstream newfile;
     string str;
-    //open the file to read my topology1 sensor data
+    //open the file to read my OPENSHS sensor data
     newfile.open("onlySensors.txt", ios:: in );
     if (newfile.is_open()) {
         getline(newfile, str); //initial row must be discharged
@@ -183,9 +185,9 @@ void MyApplication::initializeApp(int stage)
 
     if(topology == 1){
         if(sensorData[0] != "empty")
-            scheduleAt(simTime() + 15, dhttestput_timer);
-        scheduleAt(simTime() + 30, dhttestget_timer);
-        scheduleAt(simTime() + 31, topology1_classification_timer);
+            scheduleAt(simTime() + 15, openSHS_put_timer);
+        scheduleAt(simTime() + 30, openSHS_get_timer);
+        scheduleAt(simTime() + 31, openSHS_classification_timer);
     }
 
     if(topology == 2){
@@ -204,9 +206,10 @@ void MyApplication::initializeApp(int stage)
             scheduleAt(simTime() + flowSlotTime, put_flow_timer);  //first at 100s
         scheduleAt(simTime() + flowSlotTime + (flowSlotTime/3), get_flow_timer); //first at 133s
         scheduleAt(simTime() + flowSlotTime + (flowSlotTime)*2/3, flow_classification_timer); //first at 166s
-        scheduleAt(simTime() + flowSlotTime*2 , get_vote_timer); //first at 200s
-        scheduleAt(simTime() + flowSlotTime*2 + flowSlotTime/2, update_reputation_timer); //first at 250s
-
+        if(scenario6attack){
+            scheduleAt(simTime() + flowSlotTime*2 , get_vote_timer); //first at 200s
+            scheduleAt(simTime() + flowSlotTime*2 + flowSlotTime/2, update_reputation_timer); //first at 250s
+        }
     }
     bindToPort(2000);
 }
@@ -214,19 +217,17 @@ void MyApplication::initializeApp(int stage)
 void MyApplication::deleteApplicationNode()
 {
     LifetimeChurn* l = check_and_cast < LifetimeChurn * > (underlayConfigurator->getChurnGenerator(0));
-    //globalNodeList->killPeer(l->nodesList.at(5)->getAddress());
-    //cout<<"size: "<<l->nodesList.size()<<endl;
     l->deleteNode(*(l->nodesList[20]),99);
+
+    //TODO delete node from malicious nodes and victim nodes
 }
 
-
-void MyApplication::saveTopology1SensorData(const OverlayKey& key, const DHTEntry& entry)
+void MyApplication::saveOpenSHSSensorData(const OverlayKey& key, const DHTEntry& entry)
 {
     Enter_Method_Silent();
 
-    topology1SensorDataMap.erase(key);
-    topology1SensorDataMap.insert(make_pair(key, entry));
-
+    openSHSSensorDataMap.erase(key);
+    openSHSSensorDataMap.insert(make_pair(key, entry));
 }
 
 void MyApplication::saveTemperatureData(const OverlayKey& key, const DHTEntry& entry)
@@ -273,11 +274,11 @@ void MyApplication::saveVoteData(const OverlayKey& key, const DHTDoubleEntry& en
 }
 
 
-const DHTEntry* MyApplication::retrieveTopology1SensorData(const OverlayKey& key)
+const DHTEntry* MyApplication::retrieveOpenSHSSensorData(const OverlayKey& key)
 {
-    std::map<OverlayKey, DHTEntry>::iterator it = topology1SensorDataMap.find(key);
+    std::map<OverlayKey, DHTEntry>::iterator it = openSHSSensorDataMap.find(key);
 
-    if (it == topology1SensorDataMap.end()) {
+    if (it == openSHSSensorDataMap.end()) {
         return NULL;
     } else {
         return &(it->second);
@@ -337,13 +338,13 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
     return;
   }
 
-  if (myMsg -> isName("topology1_put_timer")) {
+  if (myMsg -> isName("openSHS_put_timer")) {
     try {
 
       for(int i=0;i<=numReplicas;i++){ //debug
           MyMessage *myMessage; // the message we'll send
           myMessage = new MyMessage();
-          myMessage->setType(MYMSG_PUT_TOPOLOGY1_DATA); // set the message type
+          myMessage->setType(MYMSG_PUT_OPENSHS_DATA); // set the message type
           myMessage->setTimeSlot(sampleCounter);
           std::stringstream ss;
           ss << "node" << nodeId <<"_sensorData_"<<i;
@@ -351,7 +352,7 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
           BinaryValue binValue(node);
           myMessage->setKey(OverlayKey::sha1(binValue));
           myMessage->setOwnerNodeId(nodeId); //Set the id of the node that originated the data
-          if(invalidDataAttack && globalStatistics->isMalicious(nodeId))
+          if(scenario2attack && globalStatistics->isMalicious(nodeId))
               //TODO the attacker must set an arbitrary sensor data value
               myMessage->setDetectedValue("3");
           else
@@ -369,12 +370,12 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
           return;
         }
   }
-  else if (myMsg -> isName("topology1_get_timer")) {
+  else if (myMsg -> isName("openSHS_get_timer")) {
     for (unsigned int i = 0; i < globalNodeList -> getNumNodes(); ++i) {
 
           MyMessage *myMessage;
           myMessage = new MyMessage();
-          myMessage->setType(MYMSG_GET_TOPOLOGY1_DATA); // set the message type
+          myMessage->setType(MYMSG_GET_OPENSHS_DATA); // set the message type
 
           std::stringstream ss;
           ss << "node" << i <<"_sensorData_"<<intuniform(0,numReplicas);  //debug
@@ -403,7 +404,7 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
             BinaryValue binValue(node);
             myMessage->setKey(OverlayKey::sha1(binValue));
             myMessage->setOwnerNodeId(nodeId);
-            if(invalidDataAttack && globalStatistics->isMalicious(nodeId))
+            if(scenario2attack && globalStatistics->isMalicious(nodeId))
                 myMessage->setTemperatureValue("-1"); //malicious value
             else{
                 stringstream ss;
@@ -430,7 +431,7 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
               BinaryValue binValue(node);
               myMessage->setKey(OverlayKey::sha1(binValue));
               myMessage->setOwnerNodeId(nodeId);
-              if(invalidDataAttack && globalStatistics->isMalicious(nodeId))
+              if(scenario2attack && globalStatistics->isMalicious(nodeId))
                   myMessage->setMotionValue("-1"); //malicious value
               else{
                   stringstream ss;
@@ -441,7 +442,7 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
               myMessage->setSenderAddress(thisNode);
               callRoute(myMessage->getKey(), myMessage);
         }
-        scheduleAt(simTime() + putTemperaturePeriod, put_motion_timer);
+        scheduleAt(simTime() + putMotionPeriod, put_motion_timer);
     }
 
   //each node reads data temperature/motion data from a responsible node with a given probability.
@@ -498,7 +499,7 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
     }
 
 
-  if (myMsg -> isName("topology1_classification_timer")) {
+  if (myMsg -> isName("openSHS_classification_timer")) {
       //TODO classification of sensorDataArray
 
       scheduleAt(simTime() + 3, myMsg);
@@ -564,43 +565,46 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
   if (myMsg -> isName("flow_classification_timer")) {
 
           for(int i=0;i<numSimNodes;i++){
-
               if(i!=nodeId){
-
-              if(globalStatistics->isMalicious(nodeId)){
-                  if(globalStatistics->isVictim(i)){
-                      //cout<<nodeId<<" voting against "<<i<<endl;
-                      voteMatrix[nodeId][i]= ANOMALOUS ;
-                  }
-                  // if me an node i are both malicious nodes then i classify it as normal
-                  if(globalStatistics->isMalicious(i)){
-                      voteMatrix[nodeId][i]= NORMAL ;
-                  }
-                }
-                  else{
-                      //TODO CLASSIFICAZIONE DI flowDataArray[i][j]
-                      //if im not a malicious node and node i is not having an anomalous behavior
-                      voteMatrix[nodeId][i]= NORMAL ;
-                  }
-                }
-          }
-
-          //If we are considering a distributed reputation model we must insert into the dht the result of our classification
-          for(int i=0;i<numSimNodes;i++){
-              if(i!= nodeId){
-                  MyMessage *myMessage = new MyMessage();
-                    myMessage->setType(MYMSG_PUT_VOTE);
-                   // myMessage->setTimeSlot(sampleCounter);
-                    std::stringstream ss;
-                    ss << "node" << nodeId <<"_voteData_"<<i;
-                    std::string node = ss.str();
-                    BinaryValue binValue(node);
-                    myMessage->setKey(OverlayKey::sha1(binValue));
-                    myMessage->setOwnerNodeId(nodeId);
-                    myMessage->setTargetNodeId(i);
-                    myMessage->setVoteValue(voteMatrix[nodeId][i]);
-                    myMessage->setSenderAddress(thisNode);
-                    callRoute(myMessage->getKey(), myMessage);
+                  if(globalStatistics->isMalicious(nodeId)){
+                      if(globalStatistics->isVictim(i)){
+                          //cout<<nodeId<<" voting against "<<i<<endl;
+                          voteMatrix[nodeId][i]= ANOMALOUS ;
+                      }
+                      else{
+                          voteMatrix[nodeId][i]= NORMAL ;
+                      }
+                   }
+                   else{
+                          //TODO CLASSIFICAZIONE DI flowDataArray[i][j]
+                          //if im not a malicious node and DATA FLOW HAVE BEEN MODIFIED
+                       int anomalous= ANOMALOUS;
+                       int normal= NORMAL;
+                          if(isInvalidFlowDataArray[i])    //DEUG
+                              voteMatrix[nodeId][i]= anomalous;
+                          //IF data have not been modified i proceed with normal classification
+                          else
+                              voteMatrix[nodeId][i]= normal;
+                   }
+                  //If scenario5 then we send the vote to the orchestator, else we publish it into DHT.
+                   if(scenario5attack){
+                       globalStatistics->notifyOrchestrator(nodeId,i, voteMatrix[nodeId][i]);
+                   }
+                   if(scenario6attack){
+                       MyMessage *myMessage = new MyMessage();
+                       myMessage->setType(MYMSG_PUT_VOTE);
+                     // myMessage->setTimeSlot(sampleCounter);
+                       std::stringstream ss;
+                       ss << "node" << nodeId <<"_voteData_"<<i;
+                       std::string node = ss.str();
+                       BinaryValue binValue(node);
+                       myMessage->setKey(OverlayKey::sha1(binValue));
+                       myMessage->setOwnerNodeId(nodeId);
+                       myMessage->setTargetNodeId(i);
+                       myMessage->setVoteValue(voteMatrix[nodeId][i]);
+                       myMessage->setSenderAddress(thisNode);
+                       callRoute(myMessage->getKey(), myMessage);
+                   }
               }
           }
 
@@ -635,6 +639,7 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
 
   if (myMsg -> isName("update_reputation_timer")){
          // cout << "Node: " << nodeId << ", update_reputation_timer."<< endl;
+
           if(!globalStatistics->isMalicious(nodeId)){
               for (unsigned int i = 0; i < globalNodeList -> getNumNodes(); ++i) {
                   double anomalousValidity = 0;
@@ -694,55 +699,26 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
                             }
                         }
                     }
-
                   }
+                  if(finalResult == anomalous){
+                      //TODO ATTACCO RIUSCITO. REGISTRARE TEMPO IMPIEGATO.
+                      cout<<"NODE "<<nodeId<<"classified NODE"<<i<<"as malicious!"<<endl;
+                      finishApp();
+                  }
+               /*   if(nodeId==0){ //debug
+
+                      cout<<"node"<<i<<" reputation: "<<reputation[i][0]<<" , "<<reputation[i][1]<<"   mean:"<<reputation[i][0]/(reputation[i][0]+reputation[i][1])<<" ";
+                      cout<<" updated trust :";
+                      for(int j=0;j<numSimNodes;j++)
+                              cout<<"  node"<<j<<":("<<trust[j][0]<<","<<trust[j][1]<<"),";
+                      cout<<endl;
+                  }*/
               }
-              //UDPATE TRUST
-              /*
-              for(int i=0;i<numSimNodes;i++){
-                  double anomalous= ANOMALOUS;
-                  double normal = NORMAL;
-                  int finalResult = ((reputation[i][0]/(reputation[i][0]+reputation[i][1])) >= reputationThreshold)?normal:anomalous;
-                  for(int j=0;j<numSimNodes;j++){
-                      if(nodeId!=j && nodeId!= i && i!=j){
-                          if(finalResult == voteMatrix[j][i]){
-                              trust[j][0]+= beliefVar;
-                              trust[j][1]-= beliefVar;
-                              if(trust[j][0] > 1){   //trust components must be kept within range {0,1}
-                                  trust[j][0] = 1;
-                                  trust[j][1] = 0;
-                              }
-                          }
-                          else{
-                              trust[j][0]-= disbeliefVar;
-                              trust[j][1]+= disbeliefVar;
-                              if(trust[j][0] < 0){   //trust components must be kept within range {0,1}
-                                   trust[j][0] = 0;
-                                   trust[j][1] = 1;
-                              }
-                          }
-                      }
+              for(int i=0;i<numSimNodes;i++)  //RESET VOTES
+                for(int j=0;j<numSimNodes;j++)
+                  voteMatrix[i][j] = NOT_AVAILABLE;
 
-                  }
-              }*/
-
-              for(int i=0;i<numSimNodes;i++)//debug
-                  if(i!=nodeId && nodeId==0){
-                      cout<<nodeId<<" "<<i<<" reputation: "<<reputation[i][0]<<" , "<<reputation[i][1]<<"   mean:"<<reputation[i][0]/(reputation[i][0]+reputation[i][1])<<"  trust:"<<trust[i][0]<<", "<<trust[i][1]<<endl;
-                      if(reputation[i][0]/(reputation[i][0]+reputation[i][1]) < reputationThreshold){
-                              reputation[i][2]++;
-                              cout<<"node"<< i <<" has "<<reputation[i][2]<<" strike/s..."<<endl;
-                              if(reputation[i][2] == reputationStrikesLimit)
-                                  cout<<"node"<< i <<" is malicious!"<<endl;
-                      }
-                  }
-              for(int i=0;i<numSimNodes;i++){  //RESET VOTES
-                  for(int j=0;j<numSimNodes;j++){
-                    voteMatrix[i][j] = NOT_AVAILABLE;
-                }
-              }
           }
-
         scheduleAt(simTime() + flowSlotTime, myMsg);
   }
 
@@ -756,8 +732,8 @@ void MyApplication::finishApp(){
     // The first parameter is a name for the value, you can use any name you like (use a name you can find quickly!).
     // In the end, the simulator will mix together all values, from all nodes, with the same name.
 
+    //TODO register statistics
     globalStatistics->addStdDev("MyApplication: Sent packets", numSent);
-    globalStatistics->addStdDev("MyApplication: Received packets", numReceived);
 }
 
 
@@ -774,15 +750,15 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
         return;
     }
 
-    if (myMsg->getType() == MYMSG_PUT_TOPOLOGY1_DATA) {
+    if (myMsg->getType() == MYMSG_PUT_OPENSHS_DATA) {
             //cout<<"node"<<nodeId<<": PUT request from node"<<myMsg->getOwnerNodeId()<<".Time: "<<myMsg->getTimeSlot()<<" key: "<<key.toString(16)<<endl;
         // if the responsible node is malicious and the owner of the temperature data is the victim then the attacker can manipulate the temperature data. (if integrity check is disabled)
-            if(invalidDataAttack && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
-                globalStatistics->addControlledDataPair(nodeId, myMsg->getOwnerNodeId(),"topology1");
+            if(scenario2attack && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
+                globalStatistics->addControlledDataPair(nodeId, myMsg->getOwnerNodeId(),"openshs");
                 myMsg->setDetectedValue("3");
             }
             bool isInvalidData;
-            if(invalidDataAttack && (globalStatistics->isMalicious(nodeId) || globalStatistics->isMalicious(myMsg->getOwnerNodeId()))){
+            if(scenario2attack && (globalStatistics->isMalicious(nodeId) || globalStatistics->isMalicious(myMsg->getOwnerNodeId()))){
                isInvalidData=true;
            }
            else
@@ -795,19 +771,19 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
                 simTime(),
                 isInvalidData
               };
-            saveTopology1SensorData(LUT_nodesKeys[myMsg->getOwnerNodeId()],entry);
+            saveOpenSHSSensorData(LUT_nodesKeys[myMsg->getOwnerNodeId()],entry);
      }
 
-    if (myMsg->getType() == MYMSG_GET_TOPOLOGY1_DATA) {
+    if (myMsg->getType() == MYMSG_GET_OPENSHS_DATA) {
         //cout<<thisNode.getAddress()<<": GET request from: "<<myMsg->getRequesterNodeId()<<". key: "<<key.toString(16)<<" NodeId:"<<myMsg->getOwnerNodeId()<<endl;
-        DHTEntry * entry = const_cast < DHTEntry * > (retrieveTopology1SensorData(LUT_nodesKeys[myMsg->getOwnerNodeId()]));
+        DHTEntry * entry = const_cast < DHTEntry * > (retrieveOpenSHSSensorData(LUT_nodesKeys[myMsg->getOwnerNodeId()]));
         if(entry == NULL){
             delete myMsg;
-            cout<<"MYMSG_GET_TOPOLOGY1: DROPPING MESSAGE"<<endl;
+            cout<<"MYMSG_GET_OPENSHS: DROPPING MESSAGE"<<endl;
             return;
         }
         MyMessage *response_msg = new MyMessage();
-        response_msg->setType(MYMSG_GET_TOPOLOGY1_RESPONSE);
+        response_msg->setType(MYMSG_GET_OPENSHS_RESPONSE);
         response_msg->setDetectedValue(entry->value[0].c_str());
         response_msg->setIsInvalidData(entry->isInvalidData);
         response_msg->setOwnerNodeId(myMsg->getOwnerNodeId());
@@ -818,11 +794,11 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
     if (myMsg->getType() == MYMSG_PUT_TEMPERATURE) {
     //        cout<<"node"<<nodeId<<": PUT_TEMPERATURE request from node"<<myMsg->getOwnerNodeId()<<". key: "<<key.toString(16)<<endl;
         // if the responsible node is malicious and the owner of the temperature data is the victim then the attacker can manipulate the temperature data. (if integrity check is disabled)
-            if(invalidDataAttack && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
+            if(scenario2attack && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
                 globalStatistics->addControlledDataPair(nodeId, myMsg->getOwnerNodeId(),"temperature");
             }
             bool isInvalidData;
-            if(invalidDataAttack && (globalStatistics->isMalicious(nodeId) || globalStatistics->isMalicious(myMsg->getOwnerNodeId()))){
+            if(scenario2attack && (globalStatistics->isMalicious(nodeId) || globalStatistics->isMalicious(myMsg->getOwnerNodeId()))){
                 isInvalidData=true;
                 //myMsg->setTemperatureValue("-1");
             }
@@ -858,11 +834,11 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
     if (myMsg->getType() == MYMSG_PUT_MOTION) {
                 //cout<<"node"<<nodeId<<": PUT_MOTION request from node"<<myMsg->getOwnerNodeId()<<". key: "<<key.toString(16)<<endl;
                 // if the responsible node is malicious and the owner of the motion data is the victim then the attacker can manipulate the data. (if integrity check is disabled)
-                if(invalidDataAttack && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
+                if(scenario2attack && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
                     globalStatistics->addControlledDataPair(nodeId, myMsg->getOwnerNodeId(),"motion");
                 }
                 bool isInvalidData;
-                if(invalidDataAttack && (globalStatistics->isMalicious(nodeId) || globalStatistics->isMalicious(myMsg->getOwnerNodeId()))){
+                if(scenario2attack && (globalStatistics->isMalicious(nodeId) || globalStatistics->isMalicious(myMsg->getOwnerNodeId()))){
                     isInvalidData=true;
                 }
                 else
@@ -897,12 +873,12 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
       if (myMsg->getType() == MYMSG_PUT_FLOW) {
           //cout<<"node"<<nodeId<<": PUT_FLOW request from node"<<myMsg->getOwnerNodeId()<<". key: "<<key.toString(16)<<endl;
 
-     /*     if(scenario5Attack && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
+     /*     if((scenario5attack || scenario6attack)  && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
               globalStatistics->addControlledDataPair(nodeId, myMsg->getOwnerNodeId(),"flow");
           }*/
           bool isInvalidData;
           // if the responsible node is malicious and the owner of the flow data is the victim then the attacker can manipulate the flow data. (if integrity check is disabled)
-          if(scenario5Attack && !isDataIntegrityEnabled && globalStatistics->isMalicious(nodeId) && globalStatistics->isVictim(myMsg->getOwnerNodeId())){
+          if((scenario5attack || scenario6attack) && !isDataIntegrityEnabled && globalStatistics->isMalicious(nodeId) && globalStatistics->isVictim(myMsg->getOwnerNodeId())){
               isInvalidData=true;
               //TODO substitute normal flow data with anomalous data.
           }
@@ -941,20 +917,20 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
           }
 
       if (myMsg->getType() == MYMSG_PUT_VOTE) {
-                //cout<<"node"<<nodeId<<": PUT_FLOW request from node"<<myMsg->getOwnerNodeId()<<". key: "<<key.toString(16)<<endl;
+                //cout<<"node"<<nodeId<<": PUT_VOTE request from node"<<myMsg->getOwnerNodeId()<<". key: "<<key.toString(16)<<endl;
 
                 // if the responsible node is malicious and the target of the vote is the victim then the attacker can manipulate the data. (if integrity check is disabled)
-                if(scenario5Attack && !isDataIntegrityEnabled && globalStatistics->isMalicious(nodeId) && globalStatistics->isVictim(myMsg->getTargetNodeId())){
+                if((scenario5attack || scenario6attack) && !isDataIntegrityEnabled && globalStatistics->isMalicious(nodeId) && globalStatistics->isVictim(myMsg->getTargetNodeId())){
                     globalStatistics->addControlledDataPair(nodeId, myMsg->getTargetNodeId(),"vote");
                 }
 
               bool isInvalidData;
               double* s=new double();
-              //The attacker corrupts flow data of the victim, with the aim of exclude it from the network.
-                if(scenario5Attack && !isDataIntegrityEnabled && globalStatistics->isMalicious(nodeId) && globalStatistics->isVictim(myMsg->getTargetNodeId())){
+              //The attacker corrupts votes regarding the victim, with the aim of excluding it from the network.
+                if((scenario5attack || scenario6attack) && !isDataIntegrityEnabled && globalStatistics->isMalicious(nodeId) && globalStatistics->isVictim(myMsg->getTargetNodeId())){
                     isInvalidData=true;
                     *s = ANOMALOUS;
-                    //TODO sostituire i flow normali con flow anomali.
+
                 }
                 else{
                     isInvalidData=false;
@@ -969,7 +945,7 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
         }
 
       if (myMsg->getType() == MYMSG_GET_VOTE) {
-             //       cout<<thisNode.getAddress()<<": GET_REPUTATION request from: "<<myMsg->getRequesterNodeId()<<". key: "<<key.toString(16)<<" OwnerNodeId:"<<myMsg->getOwnerNodeId()<<" TargetNodeId:"<<myMsg->getTargetNodeId()<<endl;
+             //       cout<<thisNode.getAddress()<<": GET_VOTE request from: "<<myMsg->getRequesterNodeId()<<". key: "<<key.toString(16)<<" OwnerNodeId:"<<myMsg->getOwnerNodeId()<<" TargetNodeId:"<<myMsg->getTargetNodeId()<<endl;
           //DHTDoubleEntry * entry = const_cast < DHTDoubleEntry * > (retrieveVoteData(LUT_nodesKeys[myMsg->getOwnerNodeId()]));
                     DHTDoubleEntry * entry = const_cast < DHTDoubleEntry * > (retrieveVoteData(key));
                     if(entry == NULL){
@@ -997,13 +973,13 @@ void MyApplication::handleUDPMessage(cMessage* msg)
 {
     // we are only expecting messages of type MyMessage
     MyMessage *myMsg = dynamic_cast<MyMessage*>(msg);
-    if (myMsg && myMsg->getType() == MYMSG_GET_TOPOLOGY1_RESPONSE) {
+    if (myMsg && myMsg->getType() == MYMSG_GET_OPENSHS_RESPONSE) {
         //cout<<thisNode.getAddress()<<": GET response from: "<<myMsg->getSenderAddress()<<endl;
         if(myMsg->getIsInvalidData())
             globalStatistics->invalidSensorDataGETNumber++;
         else
             globalStatistics->successfulSensorDataGETNumber++;
-        //TODO Handle the TOPOLOGY1 sensor data
+        //TODO Handle the OPENSHS sensor data
     }
     if (myMsg && myMsg->getType() == MYMSG_GET_TEMPERATURE_RESPONSE) {
             //cout<<thisNode.getAddress()<<": MYMSG_GET_TEMPERATURE_RESPONSE from: "<<myMsg->getSenderAddress()<<" isInvalidData: "<<myMsg->getIsInvalidData()<<endl;
@@ -1025,6 +1001,9 @@ void MyApplication::handleUDPMessage(cMessage* msg)
         //cout<<thisNode.getAddress()<<": MYMSG_GET_FLOW_RESPONSE from: "<<myMsg->getSenderAddress()<<" isInvalidData: "<<myMsg->getIsInvalidData()<<endl;
         for(int i=0;i<10;i++)
             flowDataArray[myMsg->getOwnerNodeId()][i] = myMsg->getFlowData(i);
+
+        if(myMsg->getIsInvalidData())//DEBUG
+            isInvalidFlowDataArray[myMsg->getOwnerNodeId()]=true;
     }
 
     if (myMsg && myMsg->getType() == MYMSG_GET_VOTE_RESPONSE) {
