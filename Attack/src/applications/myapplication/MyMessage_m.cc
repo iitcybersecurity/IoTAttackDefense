@@ -36,15 +36,15 @@ EXECUTE_ON_STARTUP(
     e->insert(MYMSG_GET_OPENSHS_DATA, "MYMSG_GET_OPENSHS_DATA");
     e->insert(MYMSG_GET_OPENSHS_RESPONSE, "MYMSG_GET_OPENSHS_RESPONSE");
     e->insert(MYMSG_PUT_OPENSHS_DATA, "MYMSG_PUT_OPENSHS_DATA");
-    e->insert(MYMSG_PUT_FLOW, "MYMSG_PUT_FLOW");
-    e->insert(MYMSG_GET_FLOW, "MYMSG_GET_FLOW");
+    e->insert(MYMSG_PUT_CLASSIFICATION_DATA, "MYMSG_PUT_CLASSIFICATION_DATA");
+    e->insert(MYMSG_GET_CLASSIFICATION_DATA, "MYMSG_GET_CLASSIFICATION_DATA");
     e->insert(MYMSG_PUT_TEMPERATURE, "MYMSG_PUT_TEMPERATURE");
     e->insert(MYMSG_PUT_MOTION, "MYMSG_PUT_MOTION");
     e->insert(MYMSG_GET_TEMPERATURE, "MYMSG_GET_TEMPERATURE");
     e->insert(MYMSG_GET_MOTION, "MYMSG_GET_MOTION");
     e->insert(MYMSG_GET_TEMPERATURE_RESPONSE, "MYMSG_GET_TEMPERATURE_RESPONSE");
     e->insert(MYMSG_GET_MOTION_RESPONSE, "MYMSG_GET_MOTION_RESPONSE");
-    e->insert(MYMSG_GET_FLOW_RESPONSE, "MYMSG_GET_FLOW_RESPONSE");
+    e->insert(MYMSG_GET_CLASSIFICATION_DATA_RESPONSE, "MYMSG_GET_CLASSIFICATION_DATA_RESPONSE");
     e->insert(MYMSG_PUT_REPUTATION, "MYMSG_PUT_REPUTATION");
     e->insert(MYMSG_GET_REPUTATION, "MYMSG_GET_REPUTATION");
     e->insert(MYMSG_GET_REPUTATION_RESPONSE, "MYMSG_GET_REPUTATION_RESPONSE");
@@ -65,7 +65,7 @@ MyMessage::MyMessage(const char *name, int kind) : cPacket(name,kind)
     this->temperatureValue_var = 0;
     this->motionValue_var = 0;
     for (unsigned int i=0; i<10; i++)
-        this->flowData_var[i] = 0;
+        this->classificationData_var[i] = 0;
     for (unsigned int i=0; i<2; i++)
         this->reputationValue_var[i] = 0;
     this->voteValue_var = 0;
@@ -102,7 +102,7 @@ void MyMessage::copy(const MyMessage& other)
     this->temperatureValue_var = other.temperatureValue_var;
     this->motionValue_var = other.motionValue_var;
     for (unsigned int i=0; i<10; i++)
-        this->flowData_var[i] = other.flowData_var[i];
+        this->classificationData_var[i] = other.classificationData_var[i];
     for (unsigned int i=0; i<2; i++)
         this->reputationValue_var[i] = other.reputationValue_var[i];
     this->voteValue_var = other.voteValue_var;
@@ -122,7 +122,7 @@ void MyMessage::parsimPack(cCommBuffer *b)
     doPacking(b,this->detectedValue_var);
     doPacking(b,this->temperatureValue_var);
     doPacking(b,this->motionValue_var);
-    doPacking(b,this->flowData_var,10);
+    doPacking(b,this->classificationData_var,10);
     doPacking(b,this->reputationValue_var,2);
     doPacking(b,this->voteValue_var);
     doPacking(b,this->isInvalidData_var);
@@ -141,7 +141,7 @@ void MyMessage::parsimUnpack(cCommBuffer *b)
     doUnpacking(b,this->detectedValue_var);
     doUnpacking(b,this->temperatureValue_var);
     doUnpacking(b,this->motionValue_var);
-    doUnpacking(b,this->flowData_var,10);
+    doUnpacking(b,this->classificationData_var,10);
     doUnpacking(b,this->reputationValue_var,2);
     doUnpacking(b,this->voteValue_var);
     doUnpacking(b,this->isInvalidData_var);
@@ -238,21 +238,21 @@ void MyMessage::setMotionValue(const char * motionValue)
     this->motionValue_var = motionValue;
 }
 
-unsigned int MyMessage::getFlowDataArraySize() const
+unsigned int MyMessage::getClassificationDataArraySize() const
 {
     return 10;
 }
 
-const char * MyMessage::getFlowData(unsigned int k) const
+const char * MyMessage::getClassificationData(unsigned int k) const
 {
     if (k>=10) throw cRuntimeError("Array of size 10 indexed by %lu", (unsigned long)k);
-    return flowData_var[k].c_str();
+    return classificationData_var[k].c_str();
 }
 
-void MyMessage::setFlowData(unsigned int k, const char * flowData)
+void MyMessage::setClassificationData(unsigned int k, const char * classificationData)
 {
     if (k>=10) throw cRuntimeError("Array of size 10 indexed by %lu", (unsigned long)k);
-    this->flowData_var[k] = flowData;
+    this->classificationData_var[k] = classificationData;
 }
 
 unsigned int MyMessage::getReputationValueArraySize() const
@@ -397,7 +397,7 @@ const char *MyMessageDescriptor::getFieldName(void *object, int field) const
         "detectedValue",
         "temperatureValue",
         "motionValue",
-        "flowData",
+        "classificationData",
         "reputationValue",
         "voteValue",
         "isInvalidData",
@@ -419,7 +419,7 @@ int MyMessageDescriptor::findField(void *object, const char *fieldName) const
     if (fieldName[0]=='d' && strcmp(fieldName, "detectedValue")==0) return base+6;
     if (fieldName[0]=='t' && strcmp(fieldName, "temperatureValue")==0) return base+7;
     if (fieldName[0]=='m' && strcmp(fieldName, "motionValue")==0) return base+8;
-    if (fieldName[0]=='f' && strcmp(fieldName, "flowData")==0) return base+9;
+    if (fieldName[0]=='c' && strcmp(fieldName, "classificationData")==0) return base+9;
     if (fieldName[0]=='r' && strcmp(fieldName, "reputationValue")==0) return base+10;
     if (fieldName[0]=='v' && strcmp(fieldName, "voteValue")==0) return base+11;
     if (fieldName[0]=='i' && strcmp(fieldName, "isInvalidData")==0) return base+12;
@@ -505,7 +505,7 @@ std::string MyMessageDescriptor::getFieldAsString(void *object, int field, int i
         case 6: return oppstring2string(pp->getDetectedValue());
         case 7: return oppstring2string(pp->getTemperatureValue());
         case 8: return oppstring2string(pp->getMotionValue());
-        case 9: return oppstring2string(pp->getFlowData(i));
+        case 9: return oppstring2string(pp->getClassificationData(i));
         case 10: return double2string(pp->getReputationValue(i));
         case 11: return double2string(pp->getVoteValue());
         case 12: return bool2string(pp->getIsInvalidData());
@@ -531,7 +531,7 @@ bool MyMessageDescriptor::setFieldAsString(void *object, int field, int i, const
         case 6: pp->setDetectedValue((value)); return true;
         case 7: pp->setTemperatureValue((value)); return true;
         case 8: pp->setMotionValue((value)); return true;
-        case 9: pp->setFlowData(i,(value)); return true;
+        case 9: pp->setClassificationData(i,(value)); return true;
         case 10: pp->setReputationValue(i,string2double(value)); return true;
         case 11: pp->setVoteValue(string2double(value)); return true;
         case 12: pp->setIsInvalidData(string2bool(value)); return true;
@@ -582,5 +582,3 @@ void *MyMessageDescriptor::getFieldStructPointer(void *object, int field, int i)
         default: return NULL;
     }
 }
-
-
