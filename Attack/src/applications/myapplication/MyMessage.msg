@@ -23,15 +23,15 @@ enum MessageType
     MYMSG_GET_OPENSHS_DATA = 3;
     MYMSG_GET_OPENSHS_RESPONSE = 4;
     MYMSG_PUT_OPENSHS_DATA = 5;
-    MYMSG_PUT_FLOW = 6;
-    MYMSG_GET_FLOW = 7;
+    MYMSG_PUT_CLASSIFICATION_DATA= 6;
+    MYMSG_GET_CLASSIFICATION_DATA = 7;
     MYMSG_PUT_TEMPERATURE = 8;
     MYMSG_PUT_MOTION = 9;
     MYMSG_GET_TEMPERATURE = 10;
     MYMSG_GET_MOTION = 11;
     MYMSG_GET_TEMPERATURE_RESPONSE = 12;
     MYMSG_GET_MOTION_RESPONSE = 13;
-    MYMSG_GET_FLOW_RESPONSE = 14;
+    MYMSG_GET_CLASSIFICATION_DATA_RESPONSE = 14;
     MYMSG_PUT_REPUTATION = 15;
     MYMSG_GET_REPUTATION = 16;
     MYMSG_GET_REPUTATION_RESPONSE = 17;
@@ -53,7 +53,7 @@ packet MyMessage
 	string detectedValue;
 	string temperatureValue;
 	string motionValue;
-	string flowData[10];
+	string classificationData[10];
 	double reputationValue[2];
 	double voteValue;
 	bool isInvalidData;
@@ -63,11 +63,3 @@ packet MyMessage
 //	Flow flow;			//It contains the flow to send 
 	
 }
-
-
-
-
-
-
-
-
