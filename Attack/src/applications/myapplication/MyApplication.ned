@@ -8,29 +8,27 @@ simple MyApplication extends BaseApp
 {
     parameters:
         @class(MyApplication);
-        int flowSlotTime;
+        int classificationSlotTime;
         //int numSimNodes;           
         int targetOverlayTerminalNum;
         int numReplicas;
-        bool scenario2attack;
-        bool scenario5attack;
-        bool scenario6attack;
-        bool isDataIntegrityEnabled;
+        int scenario;
+     //   bool scenario2attack;
+   //      bool scenario5attack;
+   //      bool scenario6attack;
+  //       bool isDataIntegrityEnabled;
         int topology;
         int putTemperaturePeriod;
         int putMotionPeriod;
         double readTemperatureProbability;
         double readMotionProbability;
-     //   double w;
-     //   double r;
-     //   double t;
-     //   double u;
-     //   double d;
         double trustThreshold;
     	double reputationThreshold;
     	double beliefVar;
     	double disbeliefVar;
-    	//int reputationStrikesLimit;
+    	double wrongClassificationProbability;
+    	int reputationStrikesLimit;
+    	bool isSybilEnabled;
 }
 
 module MyApplicationModules like ITier
