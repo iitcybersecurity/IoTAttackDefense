@@ -32,6 +32,11 @@ using namespace std;
 #define NORMAL 2;
 #define NOT_AVAILABLE 3;
 
+struct RNG {
+    int operator() (int n) {
+        return std::rand() / (1.0 + RAND_MAX) * n;
+    }
+};
 
 struct DHTDoubleEntry
 {
@@ -118,25 +123,30 @@ class MyApplication : public BaseApp
         };
 
     // module parameters
-    simtime_t flowSlotTime;
+    simtime_t classificationSlotTime;
     //int flowPerSlot;
     bool node_is_started;
     int numSimNodes;
     int ttl; /**< ttl for stored DHT records */
     int numReplicas;
    // bool resourceExhaustionAttack;
-    bool invalidDataAttack;
+    int scenario;
+    bool isSybilEnabled;
+  /*  bool invalidDataAttack;
     bool scenario2attack;
     bool scenario5attack;
     bool scenario6attack;
-    bool isDataIntegrityEnabled;
+    bool isDataIntegrityEnabled;    */
     int maliciousLimit;
     int topology;
     int putTemperaturePeriod;
     int putMotionPeriod;
     double readTemperatureProbability;
     double readMotionProbability;
-    bool *isInvalidFlowDataArray;  //debug
+    bool *isInvalidClassificationDataArray;
+    //If non-malicious node i performs an erroneous classification against another non-malicious node,
+    //then the classification result can be used by the attacker for a replay attack.
+    bool **isInvalidClassificationResultArray;
     // statistics
     int numSent; /**< number of sent packets*/
     int numGetSent; /**< number of get sent*/
@@ -157,29 +167,23 @@ class MyApplication : public BaseApp
     string * sensorData;
     char * sensorDataArray;
     //parameters for handling network data reading
-    int flowSlotNumber;
-    string* flowData;
-    string** flowDataArray;
+    int classificationSlotNumber;
+    string* classificationData;
+    string** classificationDataArray;
 
     double** reputation;
-   // double*** reputationMatrix;
     double** trust;
-    double** voteMatrix;
-/*    double w;
-    double r;
-    double t;
-    double u;
-    double d;*/
+    double** classification_results;
     double trustThreshold;
     double reputationThreshold;
     double beliefVar;
     double disbeliefVar;
-   // int reputationStrikesLimit;
-
+    int reputationStrikesLimit;
+    double wrongClassificationProbability;
     std::map<OverlayKey, DHTEntry> openSHSSensorDataMap;
     std::map<OverlayKey, DHTEntry> temperatureDataMap;
     std::map<OverlayKey, DHTEntry> motionDataMap;
-    std::map<OverlayKey, DHTEntry> flowDataMap;
+    std::map<OverlayKey, DHTEntry> classificationDataMap;
     std::map<OverlayKey, DHTDoubleEntry> reputationDataMap;
     std::map<OverlayKey, DHTDoubleEntry> voteDataMap;
 
@@ -200,11 +204,11 @@ class MyApplication : public BaseApp
     *get_temperature_timer,
     *put_motion_timer,
     *get_motion_timer,
-    *put_flow_timer,
-    *get_flow_timer,
-    *flow_classification_timer,
+    *put_classificationData_timer,
+    *get_classificationData_timer,
+    *put_classificationResult_timer,
     *get_vote_timer,
-    * update_reputation_timer;
+    * distributed_classification_timer;
 
     UnderlayConfigurator * underlayConfigurator; /**< pointer to UnderlayConfigurator in this node */
     GlobalNodeList * globalNodeList; /**< pointer to GlobalNodeList in this node*/
@@ -220,7 +224,7 @@ class MyApplication : public BaseApp
     void saveOpenSHSSensorData(const OverlayKey& key, const DHTEntry& entry);
     void saveTemperatureData(const OverlayKey& key, const DHTEntry& entry);
     void saveMotionData(const OverlayKey& key, const DHTEntry& entry);
-    void saveFlowData(const OverlayKey& key, const DHTEntry& entry);
+    void saveClassificationData(const OverlayKey& key, const DHTEntry& entry);
     void saveReputationData(const OverlayKey& key, const DHTDoubleEntry& entry);
     void saveVoteData(const OverlayKey& key, const DHTDoubleEntry& entry);
 
@@ -228,11 +232,12 @@ class MyApplication : public BaseApp
     const DHTEntry* retrieveOpenSHSSensorData(const OverlayKey& key);
     const DHTEntry* retrieveTemperatureData(const OverlayKey& key);
     const DHTEntry* retrieveMotionData(const OverlayKey& key);
-    const DHTEntry* retrieveFlowData(const OverlayKey& key);
+    const DHTEntry* retrieveClassificationData(const OverlayKey& key);
     const DHTDoubleEntry* retrieveReputationData(const OverlayKey& key);
     const DHTDoubleEntry* retrieveVoteData(const OverlayKey& key);
 
     void deleteApplicationNode();
+    void updateTrust(int nodeId, int i, int finalResult);
 
     NodeHandle* getTransportAddress(std::string ip);
     void insertTransportAddress(std::string ip, NodeHandle& ta);
@@ -263,11 +268,11 @@ class MyApplication : public BaseApp
            get_temperature_timer = NULL,
            put_motion_timer = NULL,
            get_motion_timer = NULL,
-           put_flow_timer = NULL,
-           get_flow_timer = NULL,
-           flow_classification_timer = NULL,
+           put_classificationData_timer = NULL,
+           get_classificationData_timer = NULL,
+           put_classificationResult_timer = NULL,
            get_vote_timer = NULL,
-           update_reputation_timer = NULL;
+           distributed_classification_timer = NULL;
 
            node_is_started = false;
        }
