@@ -1,26 +1,3 @@
-//
-// Copyright (C) 2007 Institut fuer Telematik, Universitaet Karlsruhe (TH)
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License
-// as published by the Free Software Foundation; either version 2
-// of the License, or (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-//
-
-/**
- * @file GlobalStatistics.h
- * @author Ingmar Baumgart
- */
-
 #ifndef __GLOBALSTATISTICS_H__
 #define __GLOBALSTATISTICS_H__
 
@@ -30,6 +7,8 @@
 #include <string>
 #include "GlobalNodeList.h"
 
+
+using namespace std;
 class OverlayKey;
 
 /**
@@ -82,8 +61,22 @@ public:
     bool** controlledSensorData;
     bool** controlledTemperatureData;
     bool** controlledMotionData;
-    bool** controlledFlowData;
+    bool** controlledClassificationData;
     bool ** controlledVoteData;
+    simtime_t classificationSlotTime;
+    int scenario;
+
+    //Variables for evaluating mean trust
+    int maximumClassificationCycles;
+    double *averageMaliciousTrustCollector;
+    double averageMaliciousTrustAccumulator;
+    double averageMaliciousTrustCounter;
+    double *averageNormalTrustCollector;
+    double averageNormalTrustAccumulator;
+    double averageNormalTrustCounter;
+    int slotNumber;
+    cOutVector averageMaliciousTrustVector;
+    cOutVector averageNormalTrustVector;
 
     int forward_counter0;
     int forward_counter1;
@@ -92,10 +85,14 @@ public:
     int numMaliciousNodes;
     int targetNumMaliciousNodes;
     int numVictimNodes;
+    int groupA_nodesNumber;
+    int groupB_nodesNumber;
     int numTemperatureDevices;
     int numMotionDevices;
     bool* maliciousNodes;
     bool* victimNodes;
+    bool* groupA_nodes;
+    bool* groupB_nodes;
     int *temperatureDevices;
     int *motionDevices;
     int victimNodeId;
@@ -167,6 +164,16 @@ public:
     bool isVictim(int i);
     void addMaliciousNode();
     void removeVictimNode(int victimNodeId);
+    void handleTimerEvent(cMessage* msg);          // called when we received a timer message
+    void registerTrust(int nodeId,int trust);
+    void setGroupA_Nodes(int groupA_nodesNumber);
+    void setGroupB_Nodes(int groupB_nodesNumber);
+    void addToGroupB();
+    void removeGroupANode(int nodeId);
+    bool isGroupANode(int nodeId);
+    bool isGroupBNode(int nodeId);
+
+
     /****/
 protected:
 
