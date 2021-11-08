@@ -22,15 +22,31 @@
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#include <GlobalNodesHandler.h>
+
+#include <IPAddressResolver.h>
+#include <TransportAddress.h>
+#include <GlobalNodeListAccess.h>
+#include <GlobalStatisticsAccess.h>
+#include <GlobalNodesHandlerAccess.h>
+#include <UnderlayConfiguratorAccess.h>
+#include <RpcMacros.h>
+#include "CommonMessages_m.h"
+ //
+//#include "c_tokenizer.h"
+#include <fstream>
+#include <iostream>
+#include <algorithm>
+#include <cmath>
+#include <sstream>
+#include <string>
+#include "UnderlayConfigurator.h"
+#include "GlobalStatistics.h"
+#include "MyMessage_m.h"
+#include "GlobalNodesHandler.h"
 
 
 using namespace std;
-
-#define N 500
-#define flowPerSlot 10;
-#define ANOMALOUS 1;
-#define NORMAL 2;
-#define NOT_AVAILABLE 3;
 
 struct RNG {
     int operator() (int n) {
@@ -53,7 +69,7 @@ struct DHTEntry
     bool isInvalidData;
     friend std::ostream& operator<<(std::ostream& Stream, const DHTEntry entry);
 };
-
+/*
 struct Flow{
     bool init;
 
@@ -100,7 +116,7 @@ struct Flow{
     std::string idle_max;
     std::string idle_min;
     std::string slot;
-};/*
+};
 struct FlowContainer{
     vector<Flow> flowVector;
     int sizee; //debug
@@ -124,53 +140,28 @@ class MyApplication : public BaseApp
 
     // module parameters
     simtime_t classificationSlotTime;
-    //int flowPerSlot;
     bool node_is_started;
-    int numSimNodes;
     int ttl; /**< ttl for stored DHT records */
     int numReplicas;
-   // bool resourceExhaustionAttack;
-    int scenario;
     bool isSybilEnabled;
-  /*  bool invalidDataAttack;
-    bool scenario2attack;
-    bool scenario5attack;
-    bool scenario6attack;
-    bool isDataIntegrityEnabled;    */
-    int maliciousLimit;
-    int topology;
     int putTemperaturePeriod;
     int putMotionPeriod;
     double readTemperatureProbability;
     double readMotionProbability;
-    bool *isInvalidClassificationDataArray;
-    //If non-malicious node i performs an erroneous classification against another non-malicious node,
-    //then the classification result can be used by the attacker for a replay attack.
-    bool **isInvalidClassificationResultArray;
-    // statistics
-    int numSent; /**< number of sent packets*/
-    int numGetSent; /**< number of get sent*/
-    int numPutSent; /**< number of put sent*/
-    int numReceived;          //number of packets received
-
-    // our timer
-    cMessage *timerMsg;
-
-    // MediaSense statistics
-    int simLookupTime;
-    int numIterations;
     int nodeId;
-    int simResetTime;
+    int numSimNodes;
+    int numDevices;
 
-    //parameters for handling sensor data reading
+    //Parameters for handling sensor data reading
     int sampleCounter;
     string * sensorData;
     char * sensorDataArray;
-    //parameters for handling network data reading
+    //Parameters for handling network data reading
     int classificationSlotNumber;
     string* classificationData;
     string** classificationDataArray;
 
+    //Parameters for Intrusion Detection System
     double** reputation;
     double** trust;
     double** classification_results;
@@ -180,43 +171,37 @@ class MyApplication : public BaseApp
     double disbeliefVar;
     int reputationStrikesLimit;
     double wrongClassificationProbability;
+
+
     std::map<OverlayKey, DHTEntry> openSHSSensorDataMap;
     std::map<OverlayKey, DHTEntry> temperatureDataMap;
     std::map<OverlayKey, DHTEntry> motionDataMap;
     std::map<OverlayKey, DHTEntry> classificationDataMap;
     std::map<OverlayKey, DHTDoubleEntry> reputationDataMap;
     std::map<OverlayKey, DHTDoubleEntry> voteDataMap;
-
-/*
-    //parameters for handling network data reading
-    int flowCounter;
-    Flow flow_array[N];*/
-    //FlowContainer flowContainerArray[N];
-
-    std::vector < OverlayKey > LUT_nodesKeys;  // data structure for storing all the nodes Kademlia key. (i'th element contains node i's key)
+    
 
     //messages for timer events
-    InfoMessage * openSHS_put_timer,
-    *openSHS_get_timer,
-    *UDPsend_timer,
-    *openSHS_classification_timer,
-    *put_temperature_timer,
-    *get_temperature_timer,
-    *put_motion_timer,
-    *get_motion_timer,
-    *put_classificationData_timer,
-    *get_classificationData_timer,
-    *put_classificationResult_timer,
-    *get_vote_timer,
-    * distributed_classification_timer;
+    InfoMessage * openSHS_put_timer, //for handling PUT operation of openSHS sensor data
+    *openSHS_get_timer,	//for handling GET operation of openSHS sensor data
+    *openSHS_classification_timer, //for handling classification of user's activity
+    *put_temperature_timer,	////for handling PUT operation of temperature data in application 2 
+    *get_temperature_timer, ////for handling GET operation of temperature data in application 2 
+    *put_motion_timer, ////for handling PUT operation of motion data in application 2 
+    *get_motion_timer, ////for handling GET operation of MOTION data in application 2 
+    *put_classificationData_timer, ////for handling PUT operation of classificationd data in application3
+    *get_classificationData_timer, ////for handling GET operation of classification data in application 3 
+    *put_classificationResult_timer,  ////for handling put operation of classification results in application 3
+    *get_classificationResult_timer, ////for handling get operation of classification results in application 3
+    * distributed_classification_timer;  //for handling distributed classification according to josang trust model
 
     UnderlayConfigurator * underlayConfigurator; /**< pointer to UnderlayConfigurator in this node */
     GlobalNodeList * globalNodeList; /**< pointer to GlobalNodeList in this node*/
+    GlobalNodesHandler* globalNodesHandler;  /**< pointer to GlobalNodesHandler in this node*/
 
-   // static const int DHTTESTAPP_VALUE_LEN = 20;
 
     void initializeApp(int stage);                 // called when the module is being created
-    void finishApp();                              // called when the module is about to be destroyed
+    //void finishApp();                              // called when the module is about to be destroyed
     void handleTimerEvent(cMessage* msg);          // called when we received a timer message
     void deliver(OverlayKey& key, cMessage* msg);  // called when we receive a message from the overlay
     void handleUDPMessage(cMessage* msg);          // called when we receive a UDP message
@@ -228,7 +213,6 @@ class MyApplication : public BaseApp
     void saveReputationData(const OverlayKey& key, const DHTDoubleEntry& entry);
     void saveVoteData(const OverlayKey& key, const DHTDoubleEntry& entry);
 
-
     const DHTEntry* retrieveOpenSHSSensorData(const OverlayKey& key);
     const DHTEntry* retrieveTemperatureData(const OverlayKey& key);
     const DHTEntry* retrieveMotionData(const OverlayKey& key);
@@ -236,12 +220,8 @@ class MyApplication : public BaseApp
     const DHTDoubleEntry* retrieveReputationData(const OverlayKey& key);
     const DHTDoubleEntry* retrieveVoteData(const OverlayKey& key);
 
-    void deleteApplicationNode();
     void updateTrust(int nodeId, int i, int finalResult);
 
-    NodeHandle* getTransportAddress(std::string ip);
-    void insertTransportAddress(std::string ip, NodeHandle& ta);
-    int generateNodeId();
     //size_t size() { return dataMap.size(); };
 
     public:
@@ -249,20 +229,22 @@ class MyApplication : public BaseApp
          cancelAndDelete(openSHS_put_timer);
          cancelAndDelete(openSHS_get_timer);
          cancelAndDelete(openSHS_classification_timer);
-         cancelAndDelete(UDPsend_timer);
          cancelAndDelete(put_temperature_timer);
          cancelAndDelete(get_temperature_timer);
          cancelAndDelete(put_motion_timer);
          cancelAndDelete(get_motion_timer);
 
-         LUT_nodesKeys.clear();
+         cancelAndDelete(put_classificationData_timer);         
+         cancelAndDelete(get_classificationData_timer);
+         cancelAndDelete(put_classificationResult_timer);
+         cancelAndDelete(get_classificationResult_timer);
+         cancelAndDelete(distributed_classification_timer);
        }
 
        MyApplication() {
 
            openSHS_put_timer = NULL,
            openSHS_get_timer = NULL,
-           UDPsend_timer = NULL,
            openSHS_classification_timer = NULL,
            put_temperature_timer = NULL,
            get_temperature_timer = NULL,
@@ -271,14 +253,12 @@ class MyApplication : public BaseApp
            put_classificationData_timer = NULL,
            get_classificationData_timer = NULL,
            put_classificationResult_timer = NULL,
-           get_vote_timer = NULL,
+           get_classificationResult_timer = NULL,
            distributed_classification_timer = NULL;
 
            node_is_started = false;
        }
 };
-//static const int TEST_MAP_INTERVAL = 10; /**< interval in seconds for writing periodic statistical information */
-static int nodes_counter = -1;
 
 
 #endif
