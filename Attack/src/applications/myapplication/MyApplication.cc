@@ -1,24 +1,4 @@
 
-#include <IPAddressResolver.h>
-#include <TransportAddress.h>
-#include <GlobalNodeListAccess.h>
-#include <GlobalStatisticsAccess.h>
-#include <UnderlayConfiguratorAccess.h>
-#include <LifetimeChurn.h>
-#include <RpcMacros.h>
-#include "CommonMessages_m.h"
- //
-//#include "c_tokenizer.h"
-#include <fstream>
-#include <iostream>
-#include <algorithm>
-#include <cmath>
-#include <sstream>
-#include <string>
-#include "UnderlayConfigurator.h"
-#include <UnderlayConfiguratorAccess.h>
-#include "GlobalStatistics.h"
-#include "MyMessage_m.h"
 #include "MyApplication.h"
 
 Define_Module(MyApplication);
@@ -37,53 +17,40 @@ void MyApplication::initializeApp(int stage)
 
     // copy the module parameter values to our own variables
     numReplicas = par("numReplicas");
-    //numSimNodes = par("numSimNodes");
-    numSimNodes= par("targetOverlayTerminalNum");
+    //numDevices = par("numDevices");
     wrongClassificationProbability =par("wrongClassificationProbability");
     classificationSlotTime = par("classificationSlotTime");
     //flowPerSlot = par("flowPerSlot");
-    topology=par("topology");
+
     putTemperaturePeriod = par("putTemperaturePeriod");
     putMotionPeriod = par("putMotionPeriod");
     readTemperatureProbability = par("readTemperatureProbability");
     readMotionProbability = par("readMotionProbability");
-    scenario = par("scenario");
-    isSybilEnabled = par("isSybilEnaled");
+    isSybilEnabled = par("isSybilEnabled");
     trustThreshold = par("trustThreshold");
     reputationThreshold = par("reputationThreshold");
     beliefVar = par("beliefVar");
     disbeliefVar = par("disbeliefVar");
     reputationStrikesLimit = par("reputationStrikesLimit");
-    //Attacks
-    //resourceExhaustionAttack = par("resourceExhaustionAttack");
-    //invalidDataAttack = par("invalidDataAttack");
-    /*
-    scenario2attack = par("scenario2attack");
-    scenario5attack = par("scenario5attack");
-    scenario6attack = par("scenario6attack");
-    isDataIntegrityEnabled = par("isDataIntegrityEnabled");*/
+
 
     globalNodeList = GlobalNodeListAccess().get();
     underlayConfigurator = UnderlayConfiguratorAccess().get();
     globalStatistics = GlobalStatisticsAccess().get();
+    globalNodesHandler = GlobalNodesHandlerAccess().get();
+
+    globalNodesHandler = dynamic_cast<GlobalNodesHandler*>(simulation.getModuleByPath("globalObserver.globalFunctions[0].function"));
+    numSimNodes=globalNodesHandler->numSimNodes;
+    numDevices= globalNodesHandler->numDevices;
+    cout<<"MyApplciation1"<<endl;  //Debug
 
     //generate nodeId of this node
-    nodeId = generateNodeId();
-    numSent = 0;
+    nodeId = globalNodesHandler->generateNodeId();
+    std::cout << "node" << nodeId <<", ip => "<< thisNode.getIp() << ", key => " << globalNodesHandler->LUT_nodesKeys[nodeId] << endl;  //Debug
 
-    isInvalidClassificationDataArray=new bool[numSimNodes]();
-    for(int i=0;i<numSimNodes;i++){
-        isInvalidClassificationDataArray[i]=false;
-    }
-    isInvalidClassificationResultArray=new bool*[numSimNodes]();
-    for(int i=0;i<numSimNodes;i++){
-        isInvalidClassificationResultArray[i]=new bool[numSimNodes]();
-        for(int j=0;j<numSimNodes;j++)
-            isInvalidClassificationResultArray[i][j]=false;
-    }
     //the array that will contain OPENSHS sensor data must be initialized
-    sensorDataArray = new char[numSimNodes]();
-     for(int i=0;i<numSimNodes;i++){
+    sensorDataArray = new char[numDevices]();
+     for(int i=0;i<numDevices;i++){
         sensorDataArray[i]='2'; //it means that the i-th node's sampled value hasn't been received yet
      }
      //Each node will read once all its sampled data from the dataset and put them periodically one by one into DHT.
@@ -100,47 +67,39 @@ void MyApplication::initializeApp(int stage)
          classificationData[i]="empty";
      }
      //the array that will contain the current classification data of all the other nodes must be initialized
-     classificationDataArray = new string*[numSimNodes]();
-     for(int i=0;i<numSimNodes;i++){
+     classificationDataArray = new string*[numDevices]();
+     for(int i=0;i<numDevices;i++){
          classificationDataArray[i]=new std::string[10];
          for(int j=0;j<10;j++){
              classificationDataArray[i][j]="empty";
          }
      }
      //The reputation of a node is distributed, meaning that i must collect the votes of the entire network and evaluate the validity of each possible outcome.
-     reputation = new double*[numSimNodes]();
-     for(int i=0;i<numSimNodes;i++){
+     reputation = new double*[numDevices]();
+     for(int i=0;i<numDevices;i++){
          reputation[i]= new double[3];
          reputation[i][0] = 1;  //Validity of normal behavior
          reputation[i][1] = 1;  //Validity of malicious behavior
          reputation[i][2] = 0;  //number of strikes. at 3 strikes a node is considered as anomalous.
      }
      //at beginning each node of the network is considered as trustful
-     trust = new double*[numSimNodes]();
-      for(int i=0;i<numSimNodes;i++){
+     trust = new double*[numDevices]();
+      for(int i=0;i<numDevices;i++){
           trust[i]= new double[2] ;
           trust[i][0] = 1;  //belief
           trust[i][1] = 0;   //disbelief
       }
       //each entry of classification_results must be initializes with NOT_AVAILALE.
-      classification_results = new double*[numSimNodes]();
-        for(int i=0;i<numSimNodes;i++){
-            classification_results[i]= new double[numSimNodes]();
-            for(int j=0;j<numSimNodes;j++){
+      classification_results = new double*[numDevices]();
+        for(int i=0;i<numDevices;i++){
+            classification_results[i]= new double[numDevices]();
+            for(int j=0;j<numDevices;j++){
                 classification_results[i][j]= NOT_AVAILABLE;
             }
         }
 
-    //Create an entry for each node of the network, storing its overlay identifier
-    LUT_nodesKeys.reserve(numSimNodes * 2);
-    for (int i = 0; i < numSimNodes * 2; ++i) {
-       std::stringstream ss;
-       ss << "node" << i;
-       std::string node = ss.str();
-       BinaryValue binValue(node);
-       LUT_nodesKeys[i] = OverlayKey::sha1(binValue);
-    }
-    std::cout << "node" << nodeId <<", ip => "<< thisNode.getIp() << ", key => " << LUT_nodesKeys[nodeId] << endl;
+    if(globalNodesHandler->isSybil(nodeId))
+        return;
 
     // These are messages that must be scheduled and handled by handleTimerMessage()
     openSHS_put_timer = new InfoMessage("openSHS_put_timer");
@@ -153,15 +112,15 @@ void MyApplication::initializeApp(int stage)
     get_classificationData_timer = new InfoMessage("get_classificationData_timer");
     openSHS_classification_timer = new InfoMessage("openSHS_classification_timer");
     put_classificationResult_timer = new InfoMessage("put_classificationResult_timer");
-    get_vote_timer = new InfoMessage("get_vote_timer");
+    get_classificationResult_timer = new InfoMessage("get_vote_timer");
     distributed_classification_timer = new InfoMessage("distributed_classification_timer");
-    UDPsend_timer = new InfoMessage("UDPsend_timer");
 
 
+    cout<<"MyApplciation2"<<endl;  //Debug
     fstream newfile;
     string str;
     //open the file to read my OPENSHS sensor data
-    if(topology == 1){
+    if(globalNodesHandler->application == 1){
         newfile.open("openSHS_dataset.txt", ios:: in );
         if (newfile.is_open()) {
             getline(newfile, str); //initial row must be discharged
@@ -176,7 +135,7 @@ void MyApplication::initializeApp(int stage)
     }
 
     //open the file to read network flow data
-    if(topology==3){
+    if(globalNodesHandler->application==3){
         string s="network_dataset_" + thisNode.getIp().str()+ ".txt";
         newfile.open(s.c_str(), ios:: in );
         if (newfile.is_open()) {
@@ -190,7 +149,7 @@ void MyApplication::initializeApp(int stage)
         newfile.close();
     }
 
-    if(topology == 1){
+    if(globalNodesHandler->application == 1){
         //Put sampled data into dht, if available
         if(sensorData[0] != "empty")
             scheduleAt(simTime() + 15, openSHS_put_timer);
@@ -198,11 +157,11 @@ void MyApplication::initializeApp(int stage)
         scheduleAt(simTime() + 31, openSHS_classification_timer);
     }
 
-    if(topology == 2){
-        if(globalStatistics->isTemperatureDevice(nodeId)){
+    if(globalNodesHandler->application == 2){
+        if(globalNodesHandler->isTemperatureDevice(nodeId)){
             scheduleAt(simTime() + 15, put_temperature_timer);
         }
-        if(globalStatistics->isMotionDevice(nodeId)){
+        if(globalNodesHandler->isMotionDevice(nodeId)){
             scheduleAt(simTime() + 15, put_motion_timer);
         }
         scheduleAt(simTime() + 30 , get_temperature_timer);
@@ -210,27 +169,20 @@ void MyApplication::initializeApp(int stage)
 
     }
     //classificationSlotTime is divided in 3 subslots. we assume that PUT/GET operations can be completed within classificationSlotTime/3 seconds
-    if(topology == 3){
+    if(globalNodesHandler->application == 3){
         if(classificationData[0] != "empty")
             scheduleAt(simTime() + classificationSlotTime, put_classificationData_timer);  //first at 100s
         scheduleAt(simTime() + classificationSlotTime + (classificationSlotTime/3), get_classificationData_timer); //first at 133s
         scheduleAt(simTime() + classificationSlotTime + (classificationSlotTime)*2/3, put_classificationResult_timer); //first at 166s
         //If attacks scenario is 6
-        if(scenario == 61 || scenario == 62){
-            scheduleAt(simTime() + classificationSlotTime*2 , get_vote_timer); //first at 200s
+        if(globalNodesHandler->scenario == 41 || globalNodesHandler->scenario == 42){
+            scheduleAt(simTime() + classificationSlotTime*2 , get_classificationResult_timer); //first at 200s
             scheduleAt(simTime() + classificationSlotTime*2 + classificationSlotTime/2, distributed_classification_timer); //first at 250s
         }
     }
     bindToPort(2000);
 }
 
-void MyApplication::deleteApplicationNode()
-{
-    LifetimeChurn* l = check_and_cast < LifetimeChurn * > (underlayConfigurator->getChurnGenerator(0));
-    l->deleteNode(*(l->nodesList[20]),99);
-
-    //TODO delete node from malicious nodes and victim nodes
-}
 
 void MyApplication::saveOpenSHSSensorData(const OverlayKey& key, const DHTEntry& entry)
 {
@@ -361,7 +313,7 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
       myMessage->setKey(OverlayKey::sha1(binValue)); //Set the key of the data
       myMessage->setOwnerNodeId(nodeId); //Set the id of the node that originated the data
       //If a scenario 2 attack is performed the attacker must put fictitious sampled data into dht.
-      if(scenario == 2 && globalStatistics->isMalicious(nodeId)){
+      if(globalNodesHandler->scenario == 2 && globalNodesHandler->isMalicious(nodeId)){
           myMessage->setDetectedValue("null");
           myMessage->setIsInvalidData(true);
       }
@@ -412,7 +364,7 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
             myMessage->setKey(OverlayKey::sha1(binValue));
             myMessage->setOwnerNodeId(nodeId);
             //If attack scenario 2 is performed
-            if(scenario == 2 && globalStatistics->isMalicious(nodeId))
+            if(globalNodesHandler->scenario == 2 && globalNodesHandler->isMalicious(nodeId))
                 myMessage->setTemperatureValue("-1"); //malicious value
             else{
                 stringstream ss;
@@ -440,7 +392,7 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
               myMessage->setKey(OverlayKey::sha1(binValue));
               myMessage->setOwnerNodeId(nodeId);
               //If scenario 2 attack is performed
-              if(scenario == 2 && globalStatistics->isMalicious(nodeId))
+              if(globalNodesHandler->scenario == 2 && globalNodesHandler->isMalicious(nodeId))
                   myMessage->setMotionValue("-1"); //malicious value
               else{
                   stringstream ss;
@@ -458,8 +410,8 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
   if (myMsg -> isName("get_temperature_timer")){
       cout<<nodeId<<"get_temperature_timer"<<endl;
 
-      int* temperatureDevices = globalStatistics -> getTemperatureDevices();
-      for (unsigned int i = 0; i < globalStatistics -> getNumTemperatureDevices(); ++i) {
+      int* temperatureDevices = globalNodesHandler -> getTemperatureDevices();
+      for (unsigned int i = 0; i < globalNodesHandler -> getNumTemperatureDevices(); ++i) {
                 if(readTemperatureProbability<intuniform(0,100))
                     continue;
                 MyMessage *myMessage;
@@ -485,9 +437,9 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
     if (myMsg -> isName("get_motion_timer")){
         cout<<nodeId<<"get_motion_timer"<<endl;
 
-        int* motionDevices = globalStatistics -> getMotionDevices();
+        int* motionDevices = globalNodesHandler -> getMotionDevices();
 
-        for (unsigned int i = 0; i < globalStatistics -> getNumMotionDevices(); ++i) {
+        for (unsigned int i = 0; i < globalNodesHandler -> getNumMotionDevices(); ++i) {
                   if(readMotionProbability<intuniform(0,100))
                       continue;
                   MyMessage *myMessage;
@@ -517,7 +469,7 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
   if (myMsg -> isName("put_classificationData_timer")) {
       try {
           classificationSlotNumber++;
-          for(int i=0;i<numSimNodes;i++){  //One replica of classification data for each other node
+          for(int i=0;i<numDevices;i++){  //One replica of classification data for each other node
                 if(i == nodeId)
                     continue;
                 MyMessage *myMessage;
@@ -572,10 +524,10 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
    }
   if (myMsg -> isName("put_classificationResult_timer")) {
 
-          for(int i=0;i<numSimNodes;i++){
+          for(int i=0;i<numDevices;i++){
               if(i!=nodeId){
-                  if(globalStatistics->isMalicious(nodeId)){
-                      if(globalStatistics->isVictim(i)){
+                  if(globalNodesHandler->isMalicious(nodeId)){
+                      if(globalNodesHandler->isVictim(i)){
                           //cout<<nodeId<<" voting against "<<i<<endl;
                           classification_results[nodeId][i]= ANOMALOUS ;
                       }
@@ -590,10 +542,10 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
                        int normal= NORMAL;
                        int not_available = NOT_AVAILABLE;
                        //If classification data is invalid and
-                       if(isInvalidClassificationDataArray[i]){
-                           if(scenario == 51)
+                       if(globalNodesHandler->isInvalidClassificationDataArray[i]){
+                           if(globalNodesHandler->scenario == 31)
                                classification_results[nodeId][i]= not_available;
-                           if(scenario == 52)
+                           if(globalNodesHandler->scenario == 32)
                                classification_results[nodeId][i]= anomalous;
                        }
                        //IF data have not been modified i proceed with normal classification
@@ -603,17 +555,17 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
                            int outcome=rand()%100;
                            if(outcome<wrongClassificationProbability){
                                classification_results[nodeId][i]= anomalous;    //Erroneous classificaiton
-                               isInvalidClassificationResultArray[nodeId][i]=true;
+                               globalNodesHandler->isInvalidClassificationResultArray[nodeId][i]=true;
                            }
                            else
                                classification_results[nodeId][i]= normal;
                        }
                    }
                   //If scenario5 then we send the vote to the orchestator, else we publish it into DHT.
-                   if(scenario == 51 || scenario == 52){
+                   if(globalNodesHandler->scenario == 31 || globalNodesHandler->scenario == 32){
                        globalStatistics->notifyOrchestrator(nodeId,i, classification_results[nodeId][i]);
                    }
-                   if(scenario == 61 || scenario == 62){
+                   if(globalNodesHandler->scenario == 41 || globalNodesHandler->scenario == 42){
                        MyMessage *myMessage = new MyMessage();
                        myMessage->setType(MYMSG_PUT_VOTE);
                      // myMessage->setTimeSlot(sampleCounter);
@@ -661,11 +613,11 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
   if (myMsg -> isName("distributed_classification_timer")){
          // cout << "Node: " << nodeId << ", distributed_classification_timer."<< endl;
 
-          if(!globalStatistics->isMalicious(nodeId)){
+          if(!globalNodesHandler->isMalicious(nodeId)){
               //for (unsigned int i = 0; i < globalNodeList -> getNumNodes(); ++i) {
-                  int nodeToClassify=(nodeId+classificationSlotNumber)%numSimNodes;
+                  int nodeToClassify=(nodeId+classificationSlotNumber)%numDevices;
                   if(nodeToClassify==nodeId)
-                      nodeToClassify=(nodeToClassify+1)%numSimNodes;
+                      nodeToClassify=(nodeToClassify+1)%numDevices;
 
                   double anomalousValidity = 0;
                   double normalValidity = 0;
@@ -724,8 +676,8 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
                       cout<<endl;
                   }*/
               //}
-              for(int i=0;i<numSimNodes;i++)  //RESET VOTES
-                for(int j=0;j<numSimNodes;j++)
+              for(int i=0;i<numDevices;i++)  //RESET VOTES
+                for(int j=0;j<numDevices;j++)
                   classification_results[i][j] = NOT_AVAILABLE;
 
           }
@@ -734,20 +686,8 @@ void MyApplication::handleTimerEvent(cMessage * msg) {
 
 }
 
-
-// finish is called when the module is being destroyed
-void MyApplication::finishApp(){
-    // finish() is usually used to save the module's statistics.
-    // We'll use globalStatistics->addStdDev(), which will calculate min, max, mean and deviation values.
-    // The first parameter is a name for the value, you can use any name you like (use a name you can find quickly!).
-    // In the end, the simulator will mix together all values, from all nodes, with the same name.
-
-    //TODO register statistics
-    globalStatistics->addStdDev("MyApplication: Sent packets", numSent);
-}
-
 void MyApplication::updateTrust(int nodeId, int i, int finalResult){
-    for(int j=0;j<numSimNodes;j++){
+    for(int j=0;j<numDevices;j++){
         if(nodeId!=j && nodeId!= i && i!=j){
             if(finalResult == classification_results[j][i]){
                 trust[j][0]+= beliefVar;
@@ -765,7 +705,7 @@ void MyApplication::updateTrust(int nodeId, int i, int finalResult){
                      trust[j][1] = 1;
                 }
             }
-            globalStatistics -> registerTrust(j,trust[j][0]);
+            globalStatistics -> registerTrust(j,trust[j][0],globalNodesHandler->isMalicious(j));
         }
   }
 }
@@ -784,14 +724,14 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
 
     if (myMsg->getType() == MYMSG_PUT_OPENSHS_DATA) {
         // if a scenario 2 attack is performed the adversary can control all the data that he must store in DHT.
-           if(scenario == 2 && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
-                globalStatistics->addControlledDataPair(nodeId, myMsg->getOwnerNodeId(),"openshs");
+           if(globalNodesHandler->scenario == 2 && (globalNodesHandler->isMalicious(nodeId) ||globalNodesHandler->isSybil(nodeId)) && !globalNodesHandler->isMalicious(myMsg->getOwnerNodeId())){
+               globalStatistics->addControlledDataPair(nodeId, myMsg->getOwnerNodeId(),"openshs");
                 myMsg->setDetectedValue("null");
                 myMsg->setIsInvalidData(true);
 
            }
            bool isInvalidData;
-           if(scenario == 2 && (globalStatistics->isMalicious(nodeId) || globalStatistics->isMalicious(myMsg->getOwnerNodeId()))){
+           if(globalNodesHandler->scenario == 2 && (globalNodesHandler->isMalicious(nodeId) || globalNodesHandler->isSybil(nodeId) || globalNodesHandler->isMalicious(myMsg->getOwnerNodeId()))){
                isInvalidData=true;
            }
            else
@@ -801,13 +741,13 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
            DHTEntry entry = {
                 s,
                 simTime(),
-                myMsg->getIsInvalidData()
+                isInvalidData
               };
-            saveOpenSHSSensorData(LUT_nodesKeys[myMsg->getOwnerNodeId()],entry);
+            saveOpenSHSSensorData(globalNodesHandler->LUT_nodesKeys[myMsg->getOwnerNodeId()],entry);
      }
 
     if (myMsg->getType() == MYMSG_GET_OPENSHS_DATA) {
-        DHTEntry * entry = const_cast < DHTEntry * > (retrieveOpenSHSSensorData(LUT_nodesKeys[myMsg->getOwnerNodeId()]));
+        DHTEntry * entry = const_cast < DHTEntry * > (retrieveOpenSHSSensorData(globalNodesHandler->LUT_nodesKeys[myMsg->getOwnerNodeId()]));
         if(entry == NULL){
             delete myMsg;
             cout<<"MYMSG_GET_OPENSHS: DROPPING MESSAGE"<<endl;
@@ -825,11 +765,11 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
     if (myMsg->getType() == MYMSG_PUT_TEMPERATURE) {
     //        cout<<"node"<<nodeId<<": PUT_TEMPERATURE request from node"<<myMsg->getOwnerNodeId()<<". key: "<<key.toString(16)<<endl;
         // if the responsible node is malicious and the owner of the temperature data is the victim then the attacker can manipulate the temperature data. (if integrity check is disabled)
-            if(scenario == 2 && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
+            if(globalNodesHandler->scenario == 2 && (globalNodesHandler->isMalicious(nodeId)|| globalNodesHandler->isSybil(nodeId)) && !globalNodesHandler->isMalicious(myMsg->getOwnerNodeId())){
                 globalStatistics->addControlledDataPair(nodeId, myMsg->getOwnerNodeId(),"temperature");
             }
             bool isInvalidData;
-            if(scenario == 2 && (globalStatistics->isMalicious(nodeId) || globalStatistics->isMalicious(myMsg->getOwnerNodeId()))){
+            if(globalNodesHandler->scenario == 2 && (globalNodesHandler->isMalicious(nodeId) || globalNodesHandler->isSybil(nodeId)|| globalNodesHandler->isMalicious(myMsg->getOwnerNodeId()))){
                 isInvalidData=true;
                 //myMsg->setTemperatureValue("-1");
             }
@@ -842,12 +782,12 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
                 simTime(),
                 isInvalidData
               };
-            saveTemperatureData(LUT_nodesKeys[myMsg->getOwnerNodeId()],entry);
+            saveTemperatureData(globalNodesHandler->LUT_nodesKeys[myMsg->getOwnerNodeId()],entry);
         }
 
     if (myMsg->getType() == MYMSG_GET_TEMPERATURE) {
    //        cout<<thisNode.getAddress()<<": GET_TEMPERATURE request from: "<<myMsg->getRequesterNodeId()<<". key: "<<key.toString(16)<<" NodeId:"<<myMsg->getOwnerNodeId()<<endl;
-            DHTEntry * entry = const_cast < DHTEntry * > (retrieveTemperatureData(LUT_nodesKeys[myMsg->getOwnerNodeId()]));
+            DHTEntry * entry = const_cast < DHTEntry * > (retrieveTemperatureData(globalNodesHandler->LUT_nodesKeys[myMsg->getOwnerNodeId()]));
             if(entry == NULL){
                 delete myMsg;
                 cout<<"MYMSG_GET_TEMPERATURE: DROPPING MESSAGE"<<endl;
@@ -865,11 +805,11 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
     if (myMsg->getType() == MYMSG_PUT_MOTION) {
                 //cout<<"node"<<nodeId<<": PUT_MOTION request from node"<<myMsg->getOwnerNodeId()<<". key: "<<key.toString(16)<<endl;
                 // if the responsible node is malicious and the owner of the motion data is the victim then the attacker can manipulate the data. (if integrity check is disabled)
-                if(scenario == 2 && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
+                if(globalNodesHandler->scenario == 2 && (globalNodesHandler->isMalicious(nodeId) || globalNodesHandler->isSybil(nodeId)) && !globalNodesHandler->isMalicious(myMsg->getOwnerNodeId())){
                     globalStatistics->addControlledDataPair(nodeId, myMsg->getOwnerNodeId(),"motion");
                 }
                 bool isInvalidData;
-                if(scenario == 2 && (globalStatistics->isMalicious(nodeId) || globalStatistics->isMalicious(myMsg->getOwnerNodeId()))){
+                if(globalNodesHandler->scenario == 2 && (globalNodesHandler->isMalicious(nodeId) || globalNodesHandler->isSybil(nodeId) || globalNodesHandler->isMalicious(myMsg->getOwnerNodeId()))){
                     isInvalidData=true;
                 }
                 else
@@ -881,12 +821,12 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
                     simTime(),
                     isInvalidData
                   };
-                saveMotionData(LUT_nodesKeys[myMsg->getOwnerNodeId()],entry);
+                saveMotionData(globalNodesHandler->LUT_nodesKeys[myMsg->getOwnerNodeId()],entry);
      }
 
      if (myMsg->getType() == MYMSG_GET_MOTION) {
             cout<<thisNode.getAddress()<<": GET_MOTION request from: "<<myMsg->getRequesterNodeId()<<". key: "<<key.toString(16)<<" NodeId:"<<myMsg->getOwnerNodeId()<<endl;
-            DHTEntry * entry = const_cast < DHTEntry * > (retrieveMotionData(LUT_nodesKeys[myMsg->getOwnerNodeId()]));
+            DHTEntry * entry = const_cast < DHTEntry * > (retrieveMotionData(globalNodesHandler->LUT_nodesKeys[myMsg->getOwnerNodeId()]));
             if(entry == NULL){
                 delete myMsg;
                 cout<<"MYMSG_GET_MOTION: DROPPING MESSAGE"<<endl;
@@ -910,7 +850,7 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
           // if the responsible node is malicious and the owner of the CLASSIFICATION data is the victim then the attacker can manipulate the classification data.
           //In case of scenario 5.1 the classification data must not be returned
           //In case of scenario 5.2 the classification data must be replaced with an old authenticated data that describes an anomalous behavior
-          if((scenario == 51 || scenario == 52) && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId())){
+          if((globalNodesHandler->scenario == 31 || globalNodesHandler->scenario == 32) && globalNodesHandler->isMalicious(nodeId) && !globalNodesHandler->isMalicious(myMsg->getOwnerNodeId())){
               globalStatistics->addControlledDataPair(nodeId, myMsg->getOwnerNodeId(),"classification_data");
               isInvalidData=true;
           }
@@ -924,12 +864,12 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
               simTime(),
               isInvalidData
           };
-          saveClassificationData(LUT_nodesKeys[myMsg->getOwnerNodeId()],entry);
+          saveClassificationData(globalNodesHandler->LUT_nodesKeys[myMsg->getOwnerNodeId()],entry);
       }
 
       if (myMsg->getType() == MYMSG_GET_CLASSIFICATION_DATA) {
               //cout<<thisNode.getAddress()<<": GET_FLOW request from: "<<myMsg->getRequesterNodeId()<<". key: "<<key.toString(16)<<" NodeId:"<<myMsg->getOwnerNodeId()<<endl;
-              DHTEntry * entry = const_cast < DHTEntry * > (retrieveClassificationData(LUT_nodesKeys[myMsg->getOwnerNodeId()]));
+              DHTEntry * entry = const_cast < DHTEntry * > (retrieveClassificationData(globalNodesHandler->LUT_nodesKeys[myMsg->getOwnerNodeId()]));
               if(entry == NULL){
                   cout<<"MYMSG_GET_CLASSIFICATION_DATA: DROPPING MESSAGE"<<endl;
 
@@ -954,9 +894,9 @@ void MyApplication::deliver(OverlayKey& key, cMessage* msg)
 
               bool isInvalidData;
               double* s=new double();
-              //in case of scenario6.2, the attacker manipulates the votes against the victims, with the aim of excluding it from the network.
+              //in case of scenario4.2, the attacker manipulates the votes against the victims, with the aim of excluding it from the network.
               //If the node had previously performed an erroneous classification against another node then the classification result can be reused.
-                if((scenario == 62) && globalStatistics->isMalicious(nodeId) && !globalStatistics->isMalicious(myMsg->getOwnerNodeId()) && globalStatistics->isVictim(myMsg->getTargetNodeId()) && isInvalidClassificationResultArray[myMsg->getOwnerNodeId()][myMsg->getTargetNodeId()]){
+                if((globalNodesHandler->scenario == 42) && globalNodesHandler->isMalicious(nodeId) && !globalNodesHandler->isMalicious(myMsg->getOwnerNodeId()) && globalNodesHandler->isVictim(myMsg->getTargetNodeId()) && globalNodesHandler->isInvalidClassificationResultArray[myMsg->getOwnerNodeId()][myMsg->getTargetNodeId()]){
                     globalStatistics->addControlledDataPair(nodeId, myMsg->getTargetNodeId(),"classification_result");
                     isInvalidData=true;
                     *s = ANOMALOUS;
@@ -1032,9 +972,9 @@ void MyApplication::handleUDPMessage(cMessage* msg)
         for(int i=0;i<10;i++)
             classificationDataArray[myMsg->getOwnerNodeId()][i] = myMsg->getClassificationData(i);
         if(myMsg->getIsInvalidData())//DEBUG
-            isInvalidClassificationDataArray[myMsg->getOwnerNodeId()]=true;
+            globalNodesHandler->isInvalidClassificationDataArray[myMsg->getOwnerNodeId()]=true;
         else
-            isInvalidClassificationDataArray[myMsg->getOwnerNodeId()]=false;
+            globalNodesHandler->isInvalidClassificationDataArray[myMsg->getOwnerNodeId()]=false;
     }
 
     if (myMsg && myMsg->getType() == MYMSG_GET_VOTE_RESPONSE) {
@@ -1048,9 +988,6 @@ void MyApplication::handleUDPMessage(cMessage* msg)
 }
 
 
-int MyApplication::generateNodeId(){
-    nodes_counter++;
-    return nodes_counter;
-}
+
 
 
