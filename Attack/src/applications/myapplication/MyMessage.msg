@@ -40,6 +40,7 @@ enum MessageType
     MYMSG_GET_VOTE_RESPONSE = 20;
 }
 
+
 // now we declare the message
 packet MyMessage 
 {
@@ -63,3 +64,11 @@ packet MyMessage
 //	Flow flow;			//It contains the flow to send 
 	
 }
+
+
+
+
+
+
+
+
