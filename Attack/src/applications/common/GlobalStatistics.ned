@@ -14,17 +14,25 @@ simple GlobalStatistics
         //cOutVector averageNormalTrustVector;
         
         bool measureNetwInitPhase;    // fetch statistics in init phase?
-        //int numSimNodes;
-        int targetOverlayTerminalNum;
+        int numSimNodes;
         double globalStatTimerInterval @unit(s);    // interval length of periodic statistic timer
         int numTemperatureDevices;
         int numMotionDevices;
        // double maliciousNodesPercentage;
-        double numMaliciousNodes;
-        double targetNumMaliciousNodes;
-        double numVictimNodes;
+        int numMaliciousNodes;
+        int targetNumMaliciousNodes;
+        int numVictimNodes;
+        int groupA_nodesNumber;
+        int groupB_nodesNumber;
         int addMaliciousNodePeriod;
         int scenario;
         int classificationSlotTime;
         int maximumClassificationCycles;
+        int numDevices;
 }
+
+
+
+
+
+
