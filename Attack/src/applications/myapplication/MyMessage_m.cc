@@ -582,3 +582,5 @@ void *MyMessageDescriptor::getFieldStructPointer(void *object, int field, int i)
         default: return NULL;
     }
 }
+
+
