@@ -12,12 +12,6 @@ simple MyApplication extends BaseApp
         //int numSimNodes;           
         int targetOverlayTerminalNum;
         int numReplicas;
-        int scenario;
-     //   bool scenario2attack;
-   //      bool scenario5attack;
-   //      bool scenario6attack;
-  //       bool isDataIntegrityEnabled;
-        int topology;
         int putTemperaturePeriod;
         int putMotionPeriod;
         double readTemperatureProbability;
