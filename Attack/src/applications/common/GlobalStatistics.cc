@@ -1,7 +1,6 @@
 #include <omnetpp.h>
 
 #include "GlobalStatistics.h"
-#include "MyApplication.h"
 
 Define_Module(GlobalStatistics);
 
@@ -11,7 +10,13 @@ const double GlobalStatistics::MIN_MEASURED = 0.1;
 
 void GlobalStatistics::initialize()
 {
+      //globalNodesHandler = dynamic_cast<GlobalNodesHandler*>(simulation.getModuleByPath("globalObserver.globalFunctions[0].function"));
 
+    numDevices = par("numDevices");
+    //numSimNodes = par("targetOverlayTerminalNum");
+    classificationSlotTime = par("classificationSlotTime");
+    numMaliciousNodes = par("numMaliciousNodes");
+    scenario = par("scenario");
     //statistics
        //isSensorDataArrayInvalid = 0;
        numSensorDataConsistencies = 0;
@@ -25,22 +30,31 @@ void GlobalStatistics::initialize()
        successfulMotionDataGETNumber = 0;
        invalidSensorDataPercentageMean.counter=0;
        invalidSensorDataPercentageMean.accumulator=0;
-       numDeliveredDataByMalicious=0;
-       numDeliveredDataByNonMalicious=0;
 
-       numSimNodes = par("targetOverlayTerminalNum");
-       sensorDataArrayCollector= new char*[numSimNodes]();
-       sensorDataArrayCounter = 0;
-       numTemperatureDevices=par("numTemperatureDevices");
-       numMotionDevices=par("numMotionDevices");
-       //maliciousNodesPercentage = par("maliciousNodesPercentage");
-       numMaliciousNodes = par("numMaliciousNodes");
-       targetNumMaliciousNodes = par("targetNumMaliciousNodes");
-       numVictimNodes = par("numVictimNodes");
-       groupA_nodesNumber = par("groupA_nodesNumber");
-       groupB_nodesNumber = par("groupB_nodesNumber");
-       classificationSlotTime = par("classificationSlotTime");
-       scenario = par("scenario");
+       cout<<"GLOBALSTATISTICS1 "<<endl; //Debug
+
+    maximumClassificationCycles = par("maximumClassificationCycles");
+    averageMaliciousTrustCollector=new double[maximumClassificationCycles];
+    averageMaliciousTrustAccumulator=0;
+    averageMaliciousTrustCounter=0;
+    averageNormalTrustCollector=new double[maximumClassificationCycles];
+    averageNormalTrustAccumulator=0;
+    averageNormalTrustCounter=0;
+    slotNumber = 0;
+
+    sentKBRTestAppMessages = 0;
+    deliveredKBRTestAppMessages = 0;
+
+    measuring = measureNetwInitPhase = par("measureNetwInitPhase");
+    measureStartTime = 0;
+
+    currentDeliveryVector.setName("Current Delivery Ratio");
+    cout<<"GLOBALSTATISTICS2 "<<endl; //Debug
+
+
+    WATCH(measuring);
+    WATCH(measureStartTime);
+    WATCH(currentDeliveryVector);
 
     controlledSensorData=new bool*[numSimNodes]();
     controlledTemperatureData=new bool*[numSimNodes]();
@@ -61,264 +75,32 @@ void GlobalStatistics::initialize()
             controlledVoteData[i][j] = false;
         }
     }
+    cout<<"GLOBALSTATISTICS3 "<<endl; //Debug
 
-
-    maliciousNodes=new bool[numSimNodes];
-    victimNodes = new bool[numSimNodes];
-    groupA_nodes = new bool[numSimNodes];
-    groupB_nodes = new bool[numSimNodes];
-    for(int i=0;i<numSimNodes;i++){
-        maliciousNodes[i]=false;
-        victimNodes[i]=false;
-        groupA_nodes[i]=false;
-        groupB_nodes[i]=false;
-    }
-    temperatureDevices=new int[numTemperatureDevices];
-    motionDevices=new int[numMotionDevices];
-
-    voteMatrix= new int*[numSimNodes];
-    for(int i=0;i<numSimNodes;i++){
-        voteMatrix[i]=new int[numSimNodes];
-        for(int j=0;j<numSimNodes;j++)
+    sensorDataArrayCollector= new char*[numDevices]();
+    sensorDataArrayCounter = 0;
+    voteMatrix= new int*[numDevices];
+    for(int i=0;i<numDevices;i++){
+        voteMatrix[i]=new int[numDevices];
+        for(int j=0;j<numDevices;j++)
             voteMatrix[i][j]=NORMAL;
     }
-    maximumClassificationCycles = par("maximumClassificationCycles");
-    averageMaliciousTrustCollector=new double[maximumClassificationCycles];
-    averageMaliciousTrustAccumulator=0;
-    averageMaliciousTrustCounter=0;
-    averageNormalTrustCollector=new double[maximumClassificationCycles];
-    averageNormalTrustAccumulator=0;
-    averageNormalTrustCounter=0;
-    slotNumber = 0;
 
-    sentKBRTestAppMessages = 0;
-    deliveredKBRTestAppMessages = 0;
-
-    measuring = measureNetwInitPhase = par("measureNetwInitPhase");
-    measureStartTime = 0;
-
-    currentDeliveryVector.setName("Current Delivery Ratio");
-
-    // start periodic globalStatTimer
-    addMaliciousNodePeriod = par("addMaliciousNodePeriod");
-    if (addMaliciousNodePeriod > 0) {
-        addMaliciousNodeTimer = new cMessage("addMaliciousNode");
-        scheduleAt(simTime() + 310, addMaliciousNodeTimer);  //DEBUG  we add the new malicious node after the first reputation_update
-    }
-
-    WATCH(measuring);
-    WATCH(measureStartTime);
-    WATCH(currentDeliveryVector);
-
-    setMaliciousNodes(numMaliciousNodes);
-    setVictimNodes(numVictimNodes);
-    setGroupA_Nodes(groupA_nodesNumber);
-    setGroupB_Nodes(groupB_nodesNumber);
-
-    setTemperatureAndMotionDevices(numTemperatureDevices,numMotionDevices);
-
-    cout<<"GlobalStatistics: victim nodes -> ";
-    for(int i=0;i<numSimNodes;i++)
-        if(victimNodes[i])
-            cout<<" "<<i;
-    cout<<endl;
-    cout<<"GlobalStatistics: initial malicious nodes -> ";
-    for(int i=0;i<numSimNodes;i++)
-        if(maliciousNodes[i])
-            cout<<" "<<i;
-    cout<<endl;
-    cout<<"GlobalStatistics: initial group A nodes -> ";
-    for(int i=0;i<numSimNodes;i++)
-        if(groupA_nodes[i])
-            cout<<" "<<i;
-    cout<<endl;
-    cout<<"GlobalStatistics: initial group B nodes -> ";
-    for(int i=0;i<numSimNodes;i++)
-        if(groupB_nodes[i])
-            cout<<" "<<i;
-    cout<<endl;
-
-    cout<<"GlobalStatistics: temperature nodes -> ";
-    for(int i=0;i<numTemperatureDevices;i++)
-        cout<<" "<<temperatureDevices[i];
-    cout<<endl;
-    cout<<"GlobalStatistics: motion nodes -> ";
-        for(int i=0;i<numMotionDevices;i++)
-            cout<<" "<<motionDevices[i];
-    cout<<endl;
-
-    if(scenario == 51 || scenario == 52){
+    if(scenario == 31 || scenario == 32){
         //The voting mechanism must be scheduled for each slot time.
         InfoMessage* votes_count_timer = new InfoMessage("votes_count_timer");
         scheduleAt(simTime() + classificationSlotTime, votes_count_timer);
     }
-    if(scenario == 61){ //In scenario 6.1 we evaluate the mean trust of malicious & non-malicious nodes
+    //In IDS-based attacks we evaluate the mean trust of malicious and non-malicious ndoes
+    if(scenario == 41 || scenario == 5 || scenario == 6){
         InfoMessage* average_trust_evaluation_timer = new InfoMessage("average_trust_evaluation_timer");
         scheduleAt(simTime() + classificationSlotTime, average_trust_evaluation_timer);
     }
-    if(scenario == 71 || scenario == 72){
-        InfoMessage* average_trust_evaluation_timer = new InfoMessage("average_trust_evaluation_timer");
-        scheduleAt(simTime() + classificationSlotTime, average_trust_evaluation_timer);
-    }
+
+    cout<<"GLOBALSTATISTICS4 "<<endl; //Debug
 
 }
 
-void GlobalStatistics::addMaliciousNode(){
-    int array[numSimNodes];
-    for(int i=0;i<numSimNodes-1;i++){
-        array[i]=i+1;
-    }
-    random_shuffle(array, array+numSimNodes-1);
-    int i=0;
-    while(isMalicious(array[i]))   //I choose a random node that is not already malicious.
-        i++;
-    maliciousNodes[array[i]]=true;
-    cout<<"Node"<<array[i]<<" is now malicious!"<<endl; //debug
-    cout<<"GlobalStatistics: actual victim nodes -> ";  //debug
-    for(int i=0;i<numSimNodes;i++)
-        if(victimNodes[i])
-            cout<<" "<<i;
-    cout<<endl;
-    cout<<"GlobalStatistics: actual malicious nodes -> ";   //debug
-    for(int i=0;i<numSimNodes;i++)
-        if(maliciousNodes[i])
-            cout<<" "<<i;
-    cout<<endl;
-    removeVictimNode(array[i]);    //I remove that node from the victim nodes list.
-}
-void GlobalStatistics::removeVictimNode(int victimNodeId){
-    victimNodes[victimNodeId] = false;
-}
-void GlobalStatistics::removeGroupANode(int nodeId){
-    groupA_nodes[nodeId] = false;
-}
-
-//This function is called for setting the victims of the IDS-based attack.
-//Used in scenario 6.1
-void GlobalStatistics::setVictimNodes(int numVictimNodes){
-    int array[numSimNodes];
-    for(int i=0;i<numSimNodes;i++){
-        array[i]=i;
-    }
-    random_shuffle(array, array+numSimNodes);
-    int j=0;
-    int i=0;
-    while(j<numVictimNodes){
-        if(!isMalicious(array[i])){
-            victimNodes[array[i]] = true;
-            j++;
-        }
-        i++;
-    }
-}
-void GlobalStatistics::addToGroupB(){
-
-    int array[numSimNodes];
-    for(int i=0;i<numSimNodes-1;i++){
-        array[i]=i+1;
-    }
-    random_shuffle(array, array+numSimNodes-1);
-    int i=0;
-    while(isMalicious(array[i]) || isGroupBNode(array[i]))   //I choose a random node that is not already malicious.
-        i++;
-    groupB_nodes[array[i]]=true;
-    removeGroupANode(array[i]);    //I remove that node from the victim nodes list.
-
-    cout<<"Node"<<array[i]<<" is being added to group B!"<<endl; //debug
-    cout<<"GlobalStatistics: actual group B nodes -> ";  //debug
-    for(int i=0;i<numSimNodes;i++)
-        if(groupB_nodes[i])
-            cout<<" "<<i;
-    cout<<endl;
-    cout<<"GlobalStatistics: actual group A nodes -> ";   //debug
-    for(int i=0;i<numSimNodes;i++)
-        if(groupA_nodes[i])
-            cout<<" "<<i;
-    cout<<endl;
-    cout<<"GlobalStatistics: actual malicious nodes -> ";   //debug
-    for(int i=0;i<numSimNodes;i++)
-        if(maliciousNodes[i])
-            cout<<" "<<i;
-    cout<<endl;
-}
-bool GlobalStatistics::isGroupANode(int nodeId){
-    return groupA_nodes[nodeId];
-}
-bool GlobalStatistics::isGroupBNode(int nodeId){
-    return groupB_nodes[nodeId];
-}
-void GlobalStatistics::setGroupA_Nodes(int groupA_nodesNumber){
-    int array[numSimNodes];
-    for(int i=0;i<numSimNodes;i++){
-        array[i]=i;
-    }
-    random_shuffle(array, array+numSimNodes);
-    int j=0;
-    int i=0;
-    while(j<groupA_nodesNumber){
-        if(!isMalicious(array[i]) && !isGroupBNode(array[i])){
-            groupA_nodes[array[i]] = true;
-            j++;
-        }
-        i++;
-    }
-}
-void GlobalStatistics::setGroupB_Nodes(int groupB_nodesNumber){
-    int array[numSimNodes];
-    for(int i=0;i<numSimNodes;i++){
-        array[i]=i;
-    }
-    random_shuffle(array, array+numSimNodes);
-    int j=0;
-    int i=0;
-    while(j<groupB_nodesNumber){
-        if(!isMalicious(array[i]) && !isGroupANode(array[i])){
-            groupB_nodes[array[i]] = true;
-            j++;
-        }
-        i++;
-    }
-}
-
-bool GlobalStatistics::isVictim(int nodeId){
-    return victimNodes[nodeId];
-}
-
-
-void GlobalStatistics::setMaliciousNodes(int numMaliciousNodes){
-
-    int array[numSimNodes];
-    for(int i=0;i<numSimNodes-1;i++){
-        array[i]=i+1;
-    }
-    random_shuffle(array, array+numSimNodes-1);
-    for(int i=0;i<numMaliciousNodes;i++)
-        maliciousNodes[array[i]]=true;
-}
-
-
-void GlobalStatistics::setTemperatureAndMotionDevices(int numTemperatureDevices, int numMotionDevices){
-
-    for(int i=0;i<numTemperatureDevices;i++)
-        temperatureDevices[i]=i;
-    for(int j=0;j<numMotionDevices;j++)
-        motionDevices[j]=numTemperatureDevices+j;
-}
-
-int GlobalStatistics::getNumTemperatureDevices(){
-    return numTemperatureDevices;
-}
-int GlobalStatistics::getNumMotionDevices(){
-    return numMotionDevices;
-}
-
-int* GlobalStatistics::getTemperatureDevices(){
-    return temperatureDevices;
-}
-
-int* GlobalStatistics::getMotionDevices(){
-    return motionDevices;
-}
 
 void GlobalStatistics::addControlledDataPair(int maliciousNode,int victimNode, string dataType){
 
@@ -335,21 +117,7 @@ void GlobalStatistics::addControlledDataPair(int maliciousNode,int victimNode, s
 
 
 }
-bool GlobalStatistics::isMalicious(int nodeId){
-    return maliciousNodes[nodeId];
-}
-bool GlobalStatistics::isTemperatureDevice(int nodeId){
-    for(int i=0;i<numTemperatureDevices;i++)
-        if(temperatureDevices[i]==nodeId)
-            return true;
-    return false;
-}
-bool GlobalStatistics::isMotionDevice(int nodeId){
-    for(int i=0;i<numMotionDevices;i++)
-            if(motionDevices[i]==nodeId)
-                return true;
-        return false;
-}
+
 void GlobalStatistics::startMeasuring()
 {
     if (!measuring) {
@@ -357,25 +125,25 @@ void GlobalStatistics::startMeasuring()
         measureStartTime = simTime();
     }
 }
-
+//the function is called to assess whether an inconsistency between the sensor data collected by each non-malicious node is present
 void GlobalStatistics::compareSensorDataArrays(char* sensorDataArray){
 
     sensorDataArrayCollector[sensorDataArrayCounter] = sensorDataArray;
     sensorDataArrayCounter++;
     int invalidDataCounter=0;
-    for(int i=0;i<numSimNodes;i++){
+    for(int i=0;i<numDevices;i++){
         if(sensorDataArray[i]=='3')
             invalidDataCounter++;
     }
     invalidSensorDataPercentageMean.counter++;
-    invalidSensorDataPercentageMean.accumulator+=(double)invalidDataCounter/numSimNodes;
+    invalidSensorDataPercentageMean.accumulator+=(double)invalidDataCounter/numDevices;
 
-    if(sensorDataArrayCounter==numSimNodes-numMaliciousNodes){ //usare numero di nodi non malicious al posto di numSimNodes
+    if(sensorDataArrayCounter==numDevices-numMaliciousNodes){ //usare numero di nodi non malicious al posto di numSimNodes
         sensorDataArrayCounter=0;
 
         cout<<endl;
-        for(int i=1; i<numSimNodes-numMaliciousNodes;i++){
-            for(int j=0;j<numSimNodes;j++){  //Qua invece lasciare numSimNodes
+        for(int i=1; i<numDevices-numMaliciousNodes;i++){
+            for(int j=0;j<numDevices;j++){  //Qua invece lasciare numSimNodes
                 if(sensorDataArrayCollector[i-1][j]!=sensorDataArrayCollector[i][j]){
                    numSensorDataInconsistencies++;
                    cout<<"GLOBALSTATISTICS: numSensorDataConsistencies-> "<<numSensorDataConsistencies<<" numSensorDataInconsistencies-> "<<numSensorDataInconsistencies<<endl;
@@ -384,7 +152,8 @@ void GlobalStatistics::compareSensorDataArrays(char* sensorDataArray){
             }
         }
         numSensorDataConsistencies++;
-        cout<<"GLOBALSTATISTICS: numSensorDataConsistencies-> "<<numSensorDataConsistencies<<" numSensorDataInconsistencies-> "<<numSensorDataInconsistencies<<" numInvalidSensorDataArrays-> "<<numInvalidSensorDataArrays<<endl;
+        //Debug
+        //cout<<"GLOBALSTATISTICS: numSensorDataConsistencies-> "<<numSensorDataConsistencies<<" numSensorDataInconsistencies-> "<<numSensorDataInconsistencies<<" numInvalidSensorDataArrays-> "<<numInvalidSensorDataArrays<<endl;
     }
 }
 
@@ -401,8 +170,8 @@ void GlobalStatistics::notifyOrchestrator(int i,int j, int vote){
             voteMatrix[i][j] = NOT_AVAILABLE;
 
 }
-void GlobalStatistics::registerTrust(int nodeId,int trust){
-    if(isMalicious(nodeId)){
+void GlobalStatistics::registerTrust(int nodeId,int trust, bool isMalicious){
+    if(isMalicious){
         averageMaliciousTrustAccumulator += trust;
         averageMaliciousTrustCounter++;
     }
@@ -415,24 +184,9 @@ void GlobalStatistics::registerTrust(int nodeId,int trust){
 
 void GlobalStatistics::handleMessage(cMessage* msg)
 {
-    if (msg == addMaliciousNodeTimer) {
-        // schedule next timer event
-        scheduleAt(simTime() + addMaliciousNodePeriod, msg);
-        if(numMaliciousNodes<targetNumMaliciousNodes){
-            addMaliciousNode();
-            numMaliciousNodes++;
-        }
-        return;
-    }
+
     InfoMessage * myMsg = dynamic_cast < InfoMessage * > (msg);
-    if (myMsg -> isName("addToGroupB")) {
-            // schedule next timer event
-            scheduleAt(simTime() + classificationSlotTime, msg);
-            if(groupB_nodesNumber<numSimNodes/2){
-                addToGroupB();
-            }
-            return;
-    }
+
     if (myMsg -> isName("average_trust_evaluation_timer")) {
 
         averageMaliciousTrustCollector[slotNumber] = averageMaliciousTrustAccumulator/averageMaliciousTrustCounter;
@@ -454,8 +208,8 @@ void GlobalStatistics::handleMessage(cMessage* msg)
            int anomalous=ANOMALOUS;
            int normal=NORMAL;
            int not_available=NOT_AVAILABLE;
-           for(int l=0;l<numSimNodes;l++){
-               for(int i=0;i<numSimNodes;i++){
+           for(int l=0;l<numDevices;l++){
+               for(int i=0;i<numDevices;i++){
                    if(i == l)
                        continue;
                    if(voteMatrix[i][l] == anomalous)
@@ -571,9 +325,8 @@ void GlobalStatistics::finalizeStatistics()
     recordScalar("successfulSensorDataGETNumber", successfulSensorDataGETNumber);
     recordScalar("successfulTemperatureDataGETNumber", successfulTemperatureDataGETNumber);
     recordScalar("successfulMotionDataGETNumber", successfulMotionDataGETNumber);
-    recordScalar("numDeliveredDataByMalicious", numDeliveredDataByMalicious);
-    recordScalar("numDeliveredDataByNonMalicious", numDeliveredDataByNonMalicious);
-    recordScalar("numDeliveredDataByNonMalicious", numDeliveredDataByNonMalicious);
+   // recordScalar("numDeliveredDataByMalicious", numDeliveredDataByMalicious);
+    //recordScalar("numDeliveredDataByNonMalicious", numDeliveredDataByNonMalicious);
 
 /*
     recordScalar("percentage of controlled sensor data", numMaliciousNodes + controlledSensorDataCounter);
