@@ -6,7 +6,8 @@
 #include <omnetpp.h>
 #include <string>
 #include "GlobalNodeList.h"
-
+#include "MyApplication.h"
+#include "GlobalNodesHandler.h"
 
 using namespace std;
 class OverlayKey;
@@ -26,7 +27,6 @@ class OverlayKey;
 /**
  * Module to record global statistics
  *
- * @author Ingmar Baumgart
  */
 
 struct MeanStatistic{
@@ -41,10 +41,12 @@ public:
 
     /********/
     UnderlayConfigurator* underlayConfigurator;
-
-    char** sensorDataArrayCollector;
-    int sensorDataArrayCounter;
-    bool isSensorDataArrayInvalid;
+    //GlobalNodesHandler* globalNodesHandler;
+    int scenario;
+    int numDevices;
+    int numSimNodes;
+    simtime_t classificationSlotTime;
+    int numMaliciousNodes;
 
     MeanStatistic invalidSensorDataPercentageMean;
     int numSensorDataConsistencies;
@@ -58,13 +60,7 @@ public:
     int successfulTemperatureDataGETNumber;
     int successfulMotionDataGETNumber;
 
-    bool** controlledSensorData;
-    bool** controlledTemperatureData;
-    bool** controlledMotionData;
-    bool** controlledClassificationData;
-    bool ** controlledVoteData;
-    simtime_t classificationSlotTime;
-    int scenario;
+    
 
     //Variables for evaluating mean trust
     int maximumClassificationCycles;
@@ -78,35 +74,18 @@ public:
     cOutVector averageMaliciousTrustVector;
     cOutVector averageNormalTrustVector;
 
-    int forward_counter0;
-    int forward_counter1;
-    int forward_counter2;
-    //double maliciousNodesPercentage;
-    int numMaliciousNodes;
-    int targetNumMaliciousNodes;
-    int numVictimNodes;
-    int groupA_nodesNumber;
-    int groupB_nodesNumber;
-    int numTemperatureDevices;
-    int numMotionDevices;
-    bool* maliciousNodes;
-    bool* victimNodes;
-    bool* groupA_nodes;
-    bool* groupB_nodes;
-    int *temperatureDevices;
-    int *motionDevices;
-    int victimNodeId;
-    int numDeliveredDataByMalicious;
-    int numDeliveredDataByNonMalicious;
+    bool** controlledSensorData;
+    bool** controlledTemperatureData;
+    bool** controlledMotionData;
+    bool** controlledClassificationData;
+    bool ** controlledVoteData;
     int**voteMatrix;
-    double addMaliciousNodePeriod;
-    cMessage*addMaliciousNodeTimer;
-    /*******/
+    char** sensorDataArrayCollector; //data structure that collects all the OPENSHS sensor data array of each node.
+    int sensorDataArrayCounter; //Index of the last inserted sensor data array
 
     double sentKBRTestAppMessages; //!< total number of messages sent by KBRTestApp
     double deliveredKBRTestAppMessages; //!< total number of messages delivered by KBRTestApp
     int testCount;
-    int numSimNodes;
     cOutVector currentDeliveryVector; //!< statistical output vector for current delivery ratio
 
     /**
@@ -149,30 +128,11 @@ public:
 
     /*****/
     void compareSensorDataArrays(char* sensorDataArray);
-    void setTemperatureAndMotionDevices(int,int);
-    void setMaliciousNodes(int);
     void addControlledDataPair(int maliciousNode,int victimNode, std::string dataType);
-    bool isMalicious(int);
-    bool isTemperatureDevice(int);
-    bool isMotionDevice(int);
-    int getNumTemperatureDevices();
-    int getNumMotionDevices();
-    int* getTemperatureDevices();
-    int* getMotionDevices();
-    void notifyOrchestrator(int,int, int);
-    void setVictimNodes(int);
-    bool isVictim(int i);
-    void addMaliciousNode();
-    void removeVictimNode(int victimNodeId);
+    
     void handleTimerEvent(cMessage* msg);          // called when we received a timer message
-    void registerTrust(int nodeId,int trust);
-    void setGroupA_Nodes(int groupA_nodesNumber);
-    void setGroupB_Nodes(int groupB_nodesNumber);
-    void addToGroupB();
-    void removeGroupANode(int nodeId);
-    bool isGroupANode(int nodeId);
-    bool isGroupBNode(int nodeId);
-
+    void registerTrust(int nodeId,int trust,bool);
+    void notifyOrchestrator(int,int, int);
 
     /****/
 protected:
